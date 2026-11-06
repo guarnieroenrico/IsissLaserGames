@@ -124,12 +124,16 @@ canvas { display: block; touch-action: none; }
   <img id="main-logo" alt="Logo">
   <h1>Laser Tag AR</h1>
   <div class="sub">Scuola Arena</div>
-  <div id="net-status" class="net-status">Cerco la partita sulla rete...</div>
+  <div id="net-status" class="net-status">Crea la partita (Host) oppure inserisci il codice stanza</div>
   <div class="btn-col">
     <button id="btn" class="btn-primary" disabled>Controllo AR...</button>
     <button id="btn-host" class="btn-host" onclick="becomeHost()">&#128081; Sono l'Host &mdash; crea la partita</button>
+    <div style="display:flex;gap:8px">
+      <input id="room-input" maxlength="4" placeholder="CODICE" autocomplete="off" style="flex:1;min-width:0;border-radius:999px;border:2px solid #2a3a6a;background:#0e1424;color:#fff;font-size:18px;font-weight:800;letter-spacing:4px;text-align:center;text-transform:uppercase;padding:10px">
+      <button class="btn-primary" onclick="joinRoom()">Entra</button>
+    </div>
   </div>
-  <div class="hint">Il primo visore preme <b>Host</b>. Tutti gli altri visori collegati alla stessa rete entrano da soli nella partita.</div>
+  <div class="hint">Il primo visore preme <b>Host</b> e legge il <b>codice stanza</b> di 4 caratteri. Gli altri lo scrivono e premono <b>Entra</b> (da 1v1 fino a 5v5, max 10 giocatori). Solo l'host avvia la partita.</div>
   <div class="hint" style="font-size:10px;opacity:.65;margin-top:8px">Modello 3D &laquo;Kalashnikov&raquo; di Freppen (Sketchfab), licenza CC BY 4.0</div>
 </div>
 
@@ -910,7 +914,7 @@ function updateRifle(dt) {
 // ============================================================================
 // 8. POOL DI PROIETTILI & PARTICELLE (Zero Allocation Anti-Lag)
 // ============================================================================
-const LASER_POOL_SIZE = 30;
+const LASER_POOL_SIZE = 100;
 const laserPool = [];
 const laserContainer = new THREE.Group();
 scene.add(laserContainer);
@@ -1167,7 +1171,7 @@ function updateVrTeamCards() {
     x.font = 'bold 28px system-ui,sans-serif';
     x.fillStyle = '#c9d2f0';
     x.fillText('Doppio Blaster Laser', 256, 320);
-    x.fillText('100 HP Salute Base', 256, 370);
+    x.fillText(teamCount('blue') + ' / ' + TEAM_MAX + ' giocatori', 256, 370);
 
     if (isSel) {
       rr(x, 80, 460, 352, 70, 35);
@@ -1200,7 +1204,7 @@ function updateVrTeamCards() {
     x.font = 'bold 28px system-ui,sans-serif';
     x.fillStyle = '#c9d2f0';
     x.fillText('Doppio Blaster Laser', 256, 320);
-    x.fillText('100 HP Salute Base', 256, 370);
+    x.fillText(teamCount('red') + ' / ' + TEAM_MAX + ' giocatori', 256, 370);
 
     if (isSel) {
       rr(x, 80, 460, 352, 70, 35);
@@ -1657,14 +1661,19 @@ function goToTeamSelect() {
 }
 
 function selectTeam(team) {
+  if (mpPeer && isHost) { pickTeam(mpPeer.id, team); return; }
+  if (mpPeer && mpConns.length) { mpConns[0].send({ type: 'team_pick', team }); return; }
   myTeam = team;
   updateVrTeamCards();
   updateBlasterColors();
 }
 
 function confirmTeamAndStart() {
+  if (!mpPeer || (!isHost && !mpConns.length)) { startMatchCountdown(); return; }   // partita da soli
+  if (!isHost) { say("Solo l'host può avviare la partita", '#ffd84d', 2.5); return; }
+  if (mpConns.length && (teamCount('blue') < 1 || teamCount('red') < 1)) { say('Serve almeno 1 giocatore per squadra', '#ff6b6b', 3); return; }
   startMatchCountdown();
-  if (mpPeer) broadcast({ type: 'team_start', team: myTeam });
+  broadcast({ type: 'team_start' });
 }
 
 // ============================================================================
@@ -1729,9 +1738,10 @@ function shockwave(pos, color, maxR) {
   fx.push({ m, t: 0, max: maxR || 12 });
 }
 
+let capP = 0, capTeam = 'blue';
 let capRing = null;
 function updateCapRing() {
-  if (!single.flag || inCaptureZoneTime <= 0.01) { if (capRing) capRing.visible = false; return; }
+  if (!single.flag || gamePhase !== 'play' || capP <= 0.003) { if (capRing) capRing.visible = false; return; }
   if (!capRing) {
     capRing = new THREE.Mesh(
       new THREE.RingGeometry(0.95, 1, 48).rotateX(-Math.PI / 2),
@@ -1740,14 +1750,14 @@ function updateCapRing() {
     scene.add(capRing);
   }
   capRing.visible = true;
-  capRing.material.color.setHex(COL[myTeam]);
+  capRing.material.color.setHex(COL[capTeam]);
   capRing.position.set(single.flag.position.x, single.flag.position.y + 0.04, single.flag.position.z);
-  capRing.scale.setScalar(Math.max(0.02, (inCaptureZoneTime / 3.5) * 1.9));
+  capRing.scale.setScalar(Math.max(0.02, capP * 1.9));
 }
 
 function resetStats() {
   teamScore.blue = teamScore.red = 0;
-  myHealth = 100; dead = false; invuln = 0; hurtFlash = 0;
+  myHealth = 100; dead = false; invuln = 0; hurtFlash = 0; capP = 0;
   drawBelt();
 }
 function hurt(d) {
@@ -1913,9 +1923,15 @@ function showFlagCapturedEffects(team) {
 // ============================================================================
 let mpPeer = null, mpConns = [], isHost = false, joinTimer = null, netGen = 0;
 const remotePlayers = {};
-// La stanza e' ricavata dall'indirizzo del sito: tutti i visori che aprono lo stesso indirizzo (stessa rete) stanno nella stessa partita
-const ROOM = 'LAN-' + ((location.hostname || 'local').replace(/[^a-z0-9]/gi, '').toUpperCase() || 'LOCAL');
+const MAX_PLAYERS = 10, TEAM_MAX = 5;
+let ROOM = '';
+var lobbyView = [];           // elenco giocatori (id, nome, squadra), uguale per tutti
+const lobby = {};             // solo host: id -> { name, team }
+const RELAY = { shoot: 1, player_pose: 1 };
 const hostPeerId = () => 'lasertag-' + ROOM + '-host';
+function genRoom() { const a = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; let r = ''; for (let i = 0; i < 4; i++) r += a[Math.floor(Math.random() * a.length)]; return r; }
+function teamCount(t) { return lobbyView.length ? lobbyView.filter(p => p.team === t).length : (myTeam === t ? 1 : 0); }
+const hostStatus = () => '✓ Host attivo · CODICE STANZA: ' + ROOM + ' · Giocatori: ' + (mpConns.length + 1) + '/' + MAX_PLAYERS;
 
 function updateMpStatus(str) {
   const el = document.getElementById('net-status');
@@ -1942,33 +1958,71 @@ function arenaPayload() {
   };
 }
 
+// ---- Lobby e squadre (l'host decide: max 5 per squadra, max 10 giocatori)
+function applyLobby(pl) {
+  lobbyView = pl;
+  const me = mpPeer && pl.find(x => x.id === mpPeer.id);
+  if (me && me.team !== myTeam) { myTeam = me.team; updateBlasterColors(); }
+  updateVrTeamCards();
+}
+function pushLobby() {
+  if (!isHost) return;
+  const pl = Object.entries(lobby).map(([id, v]) => ({ id, name: v.name, team: v.team }));
+  broadcast({ type: 'lobby', players: pl });
+  applyLobby(pl);
+}
+function pickTeam(id, team) {
+  if (team !== 'blue' && team !== 'red') return false;
+  if (!lobby[id]) { if (mpPeer && id === mpPeer.id) { myTeam = team; updateBlasterColors(); updateVrTeamCards(); } return true; }
+  if (lobby[id].team === team) return true;
+  if (teamCount(team) >= TEAM_MAX) { if (mpPeer && id === mpPeer.id) say('Squadra piena (max ' + TEAM_MAX + ')', '#ff6b6b', 2); return false; }
+  lobby[id].team = team;
+  pushLobby();
+  return true;
+}
+function removePlayer(id) {
+  if (remotePlayers[id]) { scene.remove(remotePlayers[id]); delete remotePlayers[id]; }
+  delete lobby[id];
+  broadcast({ type: 'left', id });
+  pushLobby();
+}
+
 function becomeHost() {
   if (typeof Peer === 'undefined') { updateMpStatus('Multiplayer non disponibile: serve la connessione internet per PeerJS.'); return; }
   isHost = true;
+  ROOM = genRoom();
   resetPeer();
+  Object.keys(lobby).forEach(k => delete lobby[k]);
+  lobbyView = [];
   const gen = netGen;
   updateMpStatus('Avvio host...');
-  try { mpPeer = new Peer(hostPeerId(), { debug: 1 }); } catch (e) { updateMpStatus('Errore: ' + e.message); isHost = false; startAutoJoin(); return; }
+  try { mpPeer = new Peer(hostPeerId(), { debug: 1 }); } catch (e) { updateMpStatus('Errore: ' + e.message); isHost = false; return; }
 
-  mpPeer.on('open', () => {
+  mpPeer.on('open', id => {
     if (gen !== netGen) return;
+    lobby[id] = { name: myPlayerName, team: myTeam };
     const b = document.getElementById('btn-host');
     b.classList.add('on');
-    b.textContent = '👑 Host attivo';
-    updateMpStatus('✓ Host attivo. I visori sulla stessa rete entrano da soli. Giocatori: 1');
-    showBanner('HOST ATTIVO');
+    b.textContent = '👑 Stanza ' + ROOM;
+    updateMpStatus(hostStatus());
+    showBanner('STANZA ' + ROOM);
+    pushLobby();
   });
   mpPeer.on('connection', conn => { if (gen === netGen) setupConn(conn, gen); });
   mpPeer.on('error', err => {
     if (gen !== netGen) return;
-    if (err.type === 'unavailable-id') {
-      isHost = false;
-      updateMpStatus('C\'e gia un host su questa rete: mi collego a lui...');
-      startAutoJoin();
-    } else {
-      updateMpStatus('Stato rete: ' + err.type);
-    }
+    if (err.type === 'unavailable-id') becomeHost();   // codice gia' usato: ne genero un altro
+    else updateMpStatus('Stato rete: ' + err.type);
   });
+}
+
+function joinRoom(code) {
+  const inp = document.getElementById('room-input');
+  code = String(code || (inp && inp.value) || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (code.length !== 4) { updateMpStatus('Inserisci il codice stanza di 4 caratteri'); return; }
+  ROOM = code; isHost = false;
+  try { localStorage.setItem('lt-room', ROOM); } catch (e) {}
+  startAutoJoin();
 }
 
 function scheduleJoin(ms) {
@@ -1977,23 +2031,22 @@ function scheduleJoin(ms) {
 }
 
 function startAutoJoin() {
-  if (isHost) return;
+  if (isHost || !ROOM) return;
   if (typeof Peer === 'undefined') { updateMpStatus('Multiplayer non disponibile: serve la connessione internet per PeerJS.'); return; }
   resetPeer();
   const gen = netGen;
-  updateMpStatus('🔎 Cerco la partita sulla rete...');
+  updateMpStatus('🔎 Cerco la stanza ' + ROOM + '...');
   try { mpPeer = new Peer('lasertag-' + ROOM + '-p-' + Math.floor(Math.random() * 1000000), { debug: 1 }); } catch (e) { scheduleJoin(5000); return; }
 
   mpPeer.on('open', () => {
     if (gen !== netGen) return;
     const conn = mpPeer.connect(hostPeerId(), { reliable: true });
     setupConn(conn, gen);
-    // se entro 8 secondi non c'e un host, riprovo
     joinTimer = setTimeout(() => { if (gen === netGen && !conn.open) startAutoJoin(); }, 8000);
   });
   mpPeer.on('error', err => {
     if (gen !== netGen || isHost) return;
-    updateMpStatus(err.type === 'peer-unavailable' ? '🔎 Nessun host trovato, riprovo...' : 'Stato rete: ' + err.type + ' (riprovo)');
+    updateMpStatus(err.type === 'peer-unavailable' ? '🔎 Nessuna stanza ' + ROOM + ', riprovo...' : 'Stato rete: ' + err.type + ' (riprovo)');
     scheduleJoin(4000);
   });
 }
@@ -2002,22 +2055,26 @@ function setupConn(conn, gen) {
   conn.on('open', () => {
     if (gen !== netGen) return;
     clearTimeout(joinTimer);
-    mpConns.push(conn);
     if (isHost) {
-      updateMpStatus('✓ Host attivo. Giocatori: ' + (mpConns.length + 1));
+      if (mpConns.length + 1 >= MAX_PLAYERS) { try { conn.send({ type: 'full' }); } catch (e) {} setTimeout(() => conn.close(), 400); return; }
+      mpConns.push(conn);
       showBanner('NUOVO GIOCATORE CONNESSO!');
-      conn.send(arenaPayload());
     } else {
-      updateMpStatus('✓ Connesso alla partita dell\'host');
+      mpConns.push(conn);
+      conn.send({ type: 'hello', name: myPlayerName });
+      updateMpStatus('✓ Connesso alla stanza ' + ROOM);
       showBanner('CONNESSO ALLA PARTITA');
     }
   });
-  conn.on('data', data => handleNetMessage(data));
+  conn.on('data', data => {
+    handleNetMessage(data, conn);
+    if (isHost && data && RELAY[data.type]) mpConns.forEach(c => { if (c !== conn && c.open) c.send(data); });
+  });
   conn.on('close', () => {
     if (gen !== netGen) return;
     const idx = mpConns.indexOf(conn);
     if (idx >= 0) mpConns.splice(idx, 1);
-    if (isHost) updateMpStatus('✓ Host attivo. Giocatori: ' + (mpConns.length + 1));
+    if (isHost) { removePlayer(conn.peer); updateMpStatus(hostStatus()); }
     else { updateMpStatus('Host perso, riconnessione...'); scheduleJoin(3000); }
   });
 }
@@ -2030,7 +2087,7 @@ function broadcastArena() {
   if (isHost && mpPeer) broadcast(arenaPayload());
 }
 
-function handleNetMessage(m) {
+function handleNetMessage(m, conn) {
   if (!m || !m.type) return;
   if (m.type === 'init_world' && !isHost && m.arena) {
     clearAll(true);
@@ -2040,82 +2097,169 @@ function handleNetMessage(m) {
     });
     rebuildWallCache();
     refresh();
+  } else if (m.type === 'hello' && isHost && conn) {
+    lobby[conn.peer] = { name: String(m.name || 'Giocatore').slice(0, 14), team: teamCount('blue') <= teamCount('red') ? 'blue' : 'red' };
+    conn.send(arenaPayload());
+    conn.send({ type: 'state', phase: gamePhase, score: { blue: teamScore.blue, red: teamScore.red } });
+    updateMpStatus(hostStatus());
+    pushLobby();
+  } else if (m.type === 'team_pick' && isHost && conn) {
+    if (pickTeam(conn.peer, m.team) === false) conn.send({ type: 'denied' });
+  } else if (m.type === 'denied') {
+    say('Squadra piena (max ' + TEAM_MAX + ')', '#ff6b6b', 2);
+  } else if (m.type === 'lobby' && !isHost) {
+    applyLobby(m.players || []);
+  } else if (m.type === 'state' && !isHost) {
+    teamScore.blue = m.score.blue; teamScore.red = m.score.red;
+    if (m.phase === 'play' || m.phase === 'countdown') { gamePhase = 'play'; updatePhaseUI(); }
+    drawBelt();
+  } else if (m.type === 'left') {
+    if (remotePlayers[m.id]) { scene.remove(remotePlayers[m.id]); delete remotePlayers[m.id]; }
+  } else if (m.type === 'full') {
+    netGen++; clearTimeout(joinTimer);
+    updateMpStatus('Stanza piena (max ' + MAX_PLAYERS + ' giocatori)');
   } else if (m.type === 'shoot') {
     const org = new THREE.Vector3(...m.origin);
     const dir = new THREE.Vector3(...m.dir);
     shootLaser(org, dir, m.team, m.isLeft, false);
-  } else if (m.type === 'flag_capture') {
+  } else if (m.type === 'flag_capture' && !isHost) {
     onFlagCaptured(m.team, false);
-  } else if (m.type === 'team_start') {
+  } else if (m.type === 'cap' && !isHost) {
+    capTeam = m.team; capP = m.p;
+  } else if (m.type === 'team_start' && !isHost) {
     startMatchCountdown();
   } else if (m.type === 'player_pose') {
     updateRemotePlayer(m);
   }
 }
 
+// --- Caschetto + avatar: segue testa (posizione + rotazione 3D) e corpo (solo direzione, si abbassa con la testa)
+const _ae = new THREE.Euler();
+const TEAM_HEX = { blue: 0x2f8bff, red: 0xff3b3b };
 function createPlayerAvatar(team, name) {
   const g = new THREE.Group();
-  const c = team === 'red' ? 0xff4444 : 0x3388ff;
+  const shellM = new THREE.MeshStandardMaterial({ color: 0x1b2236, metalness: 0.85, roughness: 0.35 });
+  const glowM = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  const darkM = new THREE.MeshStandardMaterial({ color: 0x0c0f1a, metalness: 0.9, roughness: 0.25 });
 
-  const head = new THREE.Mesh(
-    new THREE.BoxGeometry(0.24, 0.24, 0.24),
-    new THREE.MeshStandardMaterial({ color: 0x141824, metalness: 0.8, roughness: 0.3 })
-  );
-  head.position.y = 1.6;
+  // Casco: origine = posizione degli occhi (camera). Il centro della testa sta ~9 cm dietro e ~2 cm sopra.
+  const helmet = new THREE.Group();
+  const shell = new THREE.Group(); shell.position.set(0, 0.02, 0.085); helmet.add(shell);
+  shell.add(new THREE.Mesh(new THREE.SphereGeometry(0.17, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.72), shellM));
+  const visor = new THREE.Mesh(new THREE.CylinderGeometry(0.174, 0.174, 0.07, 24, 1, true, Math.PI - 0.9, 1.8), darkM);
+  visor.position.y = -0.02; shell.add(visor);
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.176, 0.176, 0.012, 24, 1, true, Math.PI - 0.9, 1.8), glowM);
+  band.position.y = 0.022; shell.add(band);
+  const crest = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.02, 0.3), glowM);
+  crest.position.y = 0.168; shell.add(crest);
+  [-1, 1].forEach(sx => {
+    const ear = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.04, 16).rotateZ(Math.PI / 2), darkM);
+    ear.position.set(sx * 0.172, -0.03, 0); shell.add(ear);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.006, 8, 20).rotateY(Math.PI / 2), glowM);
+    ring.position.set(sx * 0.194, -0.03, 0); shell.add(ring);
+  });
+  // Logo della scuola al centro della fronte (e dietro)
+  const logoF = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.11), logoMat);
+  logoF.position.set(0, 0.075, -0.157); logoF.rotation.set(-0.45, Math.PI, 0, 'YXZ'); shell.add(logoF);
+  const logoB = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.11), logoMat);
+  logoB.position.set(0, 0.075, 0.157); logoB.rotation.set(0.45, 0, 0); shell.add(logoB);
 
-  const visor = new THREE.Mesh(
-    new THREE.BoxGeometry(0.22, 0.08, 0.06),
-    new THREE.MeshBasicMaterial({ color: c })
-  );
-  visor.position.set(0, 1.6, -0.12);
+  // Corpo: segue solo la direzione, si abbassa quando ci si accuccia
+  const body = new THREE.Group();
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.44, 0.19), shellM);
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.03, 16).rotateX(Math.PI / 2), glowM);
+  core.position.set(0, 0.04, -0.105); torso.add(core);
+  const legs = new THREE.Mesh(new THREE.BoxGeometry(0.28, 1, 0.17), darkM);
+  body.add(torso, legs);
 
-  const chest = new THREE.Mesh(
-    new THREE.BoxGeometry(0.32, 0.42, 0.18),
-    new THREE.MeshStandardMaterial({ color: 0x1a2030, metalness: 0.9, roughness: 0.4 })
-  );
-  chest.position.y = 1.25;
+  // Nome sopra il casco
+  const lc = document.createElement('canvas'); lc.width = 256; lc.height = 64;
+  const ltex = new THREE.CanvasTexture(lc);
+  const label = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.1), new THREE.MeshBasicMaterial({ map: ltex, transparent: true, depthWrite: false }));
+  label.renderOrder = 5;
 
-  const core = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.06, 0.06, 0.04, 16),
-    new THREE.MeshBasicMaterial({ color: c })
-  );
-  core.rotation.x = Math.PI / 2;
-  core.position.set(0, 1.3, -0.095);
-
-  g.add(head, visor, chest, core);
+  g.add(helmet, body, label);
+  g.userData = { helmet, body, torso, legs, label, lc, ltex, glowM, name: name || 'Giocatore', team: null,
+    tpos: new THREE.Vector3(), cpos: new THREE.Vector3(), tq: new THREE.Quaternion(), cq: new THREE.Quaternion(), yaw: 0, last: performance.now(), fresh: true };
+  setAvatarTeam(g, team);
   scene.add(g);
   return g;
 }
-
+function setAvatarTeam(av, team) {
+  const u = av.userData; if (u.team === team) return;
+  u.team = team;
+  const hex = TEAM_HEX[team] || TEAM_HEX.blue;
+  u.glowM.color.setHex(hex);
+  const x = u.lc.getContext('2d');
+  x.clearRect(0, 0, 256, 64);
+  rr(x, 2, 6, 252, 52, 18); x.fillStyle = 'rgba(8,12,28,0.78)'; x.fill();
+  x.lineWidth = 4; x.strokeStyle = '#' + hex.toString(16).padStart(6, '0'); x.stroke();
+  x.fillStyle = '#fff'; x.font = '800 30px system-ui, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(String(u.name).slice(0, 14), 128, 33);
+  u.ltex.needsUpdate = true;
+}
 function updateRemotePlayer(p) {
   let av = remotePlayers[p.id];
   if (!av) av = remotePlayers[p.id] = createPlayerAvatar(p.team, p.name);
-  av.position.set(p.pos[0], p.pos[1], p.pos[2]);
-  if (p.rot) av.quaternion.set(p.rot[0], p.rot[1], p.rot[2], p.rot[3]);
+  const u = av.userData;
+  u.tpos.set(p.pos[0], p.pos[1], p.pos[2]);
+  if (p.rot) u.tq.set(p.rot[0], p.rot[1], p.rot[2], p.rot[3]);
+  if (u.fresh) { u.cpos.copy(u.tpos); u.cq.copy(u.tq); u.fresh = false; }
+  u.last = performance.now();
+  u.dead = !!p.d; av.visible = !u.dead;
+  if (p.team) setAvatarTeam(av, p.team);
+}
+function smoothRemotes(dt) {
+  const now = performance.now(), k = 1 - Math.exp(-18 * dt), kb = 1 - Math.exp(-5 * dt);
+  for (const id in remotePlayers) {
+    const av = remotePlayers[id], u = av.userData;
+    if (now - u.last > 4000) { scene.remove(av); delete remotePlayers[id]; continue; }
+    u.cpos.lerp(u.tpos, k); u.cq.slerp(u.tq, k);
+    u.helmet.position.copy(u.cpos); u.helmet.quaternion.copy(u.cq);
+    _ae.setFromQuaternion(u.cq, 'YXZ');
+    let d = _ae.y - u.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+    u.yaw += d * kb;
+    u.body.position.set(u.cpos.x, 0, u.cpos.z); u.body.rotation.y = u.yaw;
+    u.torso.position.y = u.cpos.y - 0.36;
+    const L = Math.max(0.15, u.cpos.y - 0.62);
+    u.legs.scale.y = L; u.legs.position.y = L / 2;
+    u.label.position.set(u.cpos.x, u.cpos.y + 0.36, u.cpos.z);
+    u.label.lookAt(camera.position);
+  }
 }
 
 // ============================================================================
 // 14. LOGICA DI GIOCO & CONQUISTA BANDIERA
 // ============================================================================
 let inCaptureZoneTime = 0;
-function checkFlagCapture(dt) {
-  if (gamePhase !== 'play' || !single.flag) return;
-  const flagPos = single.flag.position;
-  const playerPos = camera.position;
-  const dist = Math.hypot(playerPos.x - flagPos.x, playerPos.z - flagPos.z);
-
-  const hf = document.getElementById('hf');
-  if (dist < 1.9) {
-    inCaptureZoneTime += dt;
-    const progress = Math.min(100, Math.floor((inCaptureZoneTime / 3.5) * 100));
-    if (hf) hf.textContent = '⚡ Cattura ' + (myTeam === 'blue' ? 'BLU' : 'ROSSA') + ': ' + progress + '%';
-
-    if (inCaptureZoneTime >= 3.5) {
-      inCaptureZoneTime = 0;
-      onFlagCaptured(myTeam, true);
+let capSendT = 0, capSent = 0;
+function flagLogic(dt) {
+  if (gamePhase !== 'play' || !single.flag) { capP = 0; return; }
+  const f = single.flag.position;
+  let nb = 0, nr = 0;
+  const inZ = (x, z) => Math.hypot(x - f.x, z - f.z) < 1.9;
+  if (!dead && inZ(camera.position.x, camera.position.z)) { if (myTeam === 'blue') nb++; else nr++; }
+  for (const id in remotePlayers) {
+    const u = remotePlayers[id].userData;
+    if (!u.dead && inZ(u.tpos.x, u.tpos.z)) { if (u.team === 'blue') nb++; else nr++; }
+  }
+  const own = nb > nr ? 'blue' : nr > nb ? 'red' : null;
+  if (own) {
+    if (own !== capTeam) { capTeam = own; capP = 0; }
+    capP = Math.min(1, capP + dt / 3.5);
+    if (capP >= 1) {
+      capP = 0;
+      onFlagCaptured(own, false);
+      if (mpPeer) broadcast({ type: 'flag_capture', team: own });
     }
-  } else {
-    inCaptureZoneTime = Math.max(0, inCaptureZoneTime - dt * 1.5);
+  } else if (nb === 0 && nr === 0) capP = Math.max(0, capP - dt * 1.5 / 3.5);
+  // pari (contesa): il progresso resta fermo
+}
+function checkFlagCapture(dt) {
+  if (!mpPeer || isHost) flagLogic(dt);
+  if (isHost && mpPeer) {
+    capSendT += dt;
+    if (capSendT > 0.2 && (capP > 0 || capSent > 0)) { capSendT = 0; capSent = capP; broadcast({ type: 'cap', team: capTeam, p: Math.round(capP * 1000) / 1000 }); }
   }
   updateCapRing();
 }
@@ -2143,6 +2287,14 @@ function refresh() {
 
 let lastAnimT = performance.now();
 const _lp = new THREE.Vector3(), _lt = new THREE.Vector3(), _lc = new THREE.Vector3(), _lseg = new THREE.Line3();
+function segHitsMe() {
+  _lt.set(0, 0.02, 0.085).applyQuaternion(camera.quaternion).add(camera.position); // testa
+  _lseg.closestPointToPoint(_lt, true, _lc);
+  if (_lc.distanceTo(_lt) < 0.2) return true;
+  _lt.copy(camera.position); _lt.y -= 0.36; // busto
+  _lseg.closestPointToPoint(_lt, true, _lc);
+  return _lc.distanceTo(_lt) < 0.32;
+}
 function animate(time) {
   const t = (time || performance.now()) / 1000;
   const now = performance.now();
@@ -2182,9 +2334,7 @@ function animate(time) {
         l.travel += l.speed * dt;
         if (l.travel < l.wallDist) {
           _lseg.set(_lp, l.mesh.position);
-          _lt.copy(camera.position); _lt.y -= 0.3;
-          _lseg.closestPointToPoint(_lt, true, _lc);
-          if (_lc.distanceTo(_lt) < 0.5) { l.active = false; l.mesh.visible = false; hurt(HIT_DMG); }
+          if (segHitsMe()) { l.active = false; l.mesh.visible = false; hurt(HIT_DMG); }
         }
       }
       l.life -= dt;
@@ -2212,13 +2362,16 @@ function animate(time) {
   checkFlagCapture(dt);
 
   // Sync P2P Rete a 25Hz
-  if (mpPeer && (window._netTick = (window._netTick || 0) + 1) % 2 === 0) {
+  window._netT = (window._netT || 0) + dt;
+  if (mpPeer && window._netT >= 0.05) {
+    window._netT = 0;
     const p = camera.position, q = camera.quaternion;
     broadcast({
       type: 'player_pose',
       id: mpPeer.id,
       name: myPlayerName,
       team: myTeam,
+      d: dead ? 1 : 0,
       pos: [r3(p.x), r3(p.y), r3(p.z)],
       rot: [r3(q.x), r3(q.y), r3(q.z), r3(q.w)]
     });
@@ -2231,6 +2384,7 @@ function animate(time) {
   }
   updateCountdownMesh(dt);
   updateHud(dt);
+  smoothRemotes(dt);
 
   renderer.render(scene, camera);
 }
@@ -2282,7 +2436,13 @@ async function initAR() {
 document.getElementById('main-logo').src = LOGO_SRC;
 initAR();
 refresh();
-startAutoJoin();
+(function () {
+  let c = null;
+  try { c = new URLSearchParams(location.search).get('stanza'); } catch (e) {}
+  const inp = document.getElementById('room-input');
+  if (c) { if (inp) inp.value = c.toUpperCase().slice(0, 4); joinRoom(c); }
+  else { try { const r = localStorage.getItem('lt-room'); if (r && inp) inp.value = r; } catch (e) {} }
+})();
 
 window.addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
