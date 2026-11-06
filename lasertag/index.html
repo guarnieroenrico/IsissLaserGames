@@ -317,6 +317,19 @@ class SoundEngine {
       osc.stop(st + 0.26);
     });
   }
+  playHurt() {
+    this.ensure();
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(320, t);
+    osc.frequency.exponentialRampToValueAtTime(70, t + 0.22);
+    gain.gain.setValueAtTime(0.35, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.25);
+    osc.connect(gain); gain.connect(this.ctx.destination);
+    osc.start(t); osc.stop(t + 0.26);
+  }
 }
 const audio = new SoundEngine();
 
@@ -966,6 +979,7 @@ function triggerMuzzleFlash(origin, team) {
 function shootLaser(origin, direction, team, isLeft = false, isLocal = true) {
   audio.playShoot(team, isLeft);
   triggerMuzzleFlash(origin, team);
+  let slot = null;
 
   for (let i = 0; i < LASER_POOL_SIZE; i++) {
     const l = laserPool[i];
@@ -978,6 +992,8 @@ function shootLaser(origin, direction, team, isLeft = false, isLocal = true) {
       l.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), direction);
       l.dir.copy(direction).normalize();
       l.life = 1.0;
+      l.remote = !isLocal; l.travel = 0; l.wallDist = 1e9;
+      slot = l;
       break;
     }
   }
@@ -992,6 +1008,7 @@ function shootLaser(origin, direction, team, isLeft = false, isLocal = true) {
     const hits = rc.intersectObjects(cachedWallMeshes, false);
     if (hits.length > 0) {
       const h = hits[0];
+      if (slot) slot.wallDist = h.distance;
       const delayMs = (h.distance / 55) * 1000;
       setTimeout(() => {
         audio.playWallHit();
@@ -1101,14 +1118,17 @@ function drawCountdown(text) {
   const x = cdMesh.userData.ctx;
   x.clearRect(0, 0, 512, 512);
   const g = x.createRadialGradient(256, 256, 20, 256, 256, 256);
-  g.addColorStop(0, 'rgba(47,139,255,0.45)');
-  g.addColorStop(1, 'rgba(47,139,255,0)');
+  const col = { 3: '#ff3b3b', 2: '#ffd84d', 1: '#3bff7a' }[text] || '#2f8bff';
+  g.addColorStop(0, col);
+  g.addColorStop(1, col + '00');
+  x.globalAlpha = 0.5;
   x.fillStyle = g;
   x.fillRect(0, 0, 512, 512);
+  x.globalAlpha = 1;
   x.textAlign = 'center';
   x.textBaseline = 'middle';
   x.font = '900 ' + (String(text).length <= 1 ? 320 : 200) + 'px system-ui, sans-serif';
-  x.shadowColor = '#2f8bff';
+  x.shadowColor = col;
   x.shadowBlur = 40;
   x.fillStyle = '#ffffff';
   x.fillText(String(text), 256, 262);
@@ -1647,8 +1667,172 @@ function confirmTeamAndStart() {
   if (mpPeer) broadcast({ type: 'team_start', team: myTeam });
 }
 
+// ============================================================================
+// HUD 3D (messaggi, cintura HP/punti, vignetta danno), effetti, HP e vittoria
+// ============================================================================
+const WIN_SCORE = 500, RESPAWN_S = 5, HIT_DMG = 10;
+let dead = false, respawnT = 0, invuln = 0, hurtFlash = 0, hudT = 0;
+const fx = [];
+const _hv = new THREE.Vector3(), _bf = new THREE.Vector3(), beltDir = new THREE.Vector3(0, 0, -1);
+
+const hudMsg = mk(0.9, 0.225, 1024, 256, 'hudmsg', 0, 0, 0);
+hudMsg.visible = false; hudMsg.renderOrder = 11; hudMsg.material.depthTest = false; scene.add(hudMsg);
+function say(text, color, secs) {
+  const x = hudMsg.userData.ctx;
+  x.clearRect(0, 0, 1024, 256);
+  rr(x, 10, 40, 1004, 176, 40);
+  x.fillStyle = 'rgba(8,12,28,0.78)'; x.fill();
+  x.lineWidth = 8; x.strokeStyle = color || '#ffd84d'; x.stroke();
+  let fs = 80;
+  x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = '#fff';
+  x.shadowColor = color || '#ffd84d'; x.shadowBlur = 24;
+  do { x.font = '900 ' + fs + 'px system-ui, sans-serif'; fs -= 4; } while (x.measureText(text).width > 940 && fs > 24);
+  x.fillText(text, 512, 132);
+  x.shadowBlur = 0;
+  hudMsg.userData.tex.needsUpdate = true;
+  hudT = secs || 3;
+}
+
+const vig = mk(1.0, 1.0, 256, 256, 'vig', 0, 0, 0);
+vig.visible = false; vig.renderOrder = 9; vig.material.depthTest = false; scene.add(vig);
+{
+  const x = vig.userData.ctx, g = x.createRadialGradient(128, 128, 60, 128, 128, 128);
+  g.addColorStop(0, 'rgba(255,0,0,0)'); g.addColorStop(1, 'rgba(255,0,0,0.95)');
+  x.fillStyle = g; x.fillRect(0, 0, 256, 256); vig.userData.tex.needsUpdate = true;
+}
+
+const belt = mk(0.36, 0.09, 720, 180, 'belt', 0, 0, 0);
+belt.visible = false; belt.renderOrder = 8; belt.material.depthTest = false; scene.add(belt);
+function drawBelt() {
+  const x = belt.userData.ctx, W = 720, H = 180;
+  x.clearRect(0, 0, W, H);
+  const tc = myTeam === 'red' ? '#ff4d4d' : '#2f8bff';
+  rr(x, 6, 6, W - 12, H - 12, 28);
+  x.fillStyle = 'rgba(8,12,28,0.82)'; x.fill(); x.lineWidth = 6; x.strokeStyle = tc; x.stroke();
+  const f = myHealth / 100;
+  x.fillStyle = 'rgba(255,255,255,0.12)'; rr(x, 28, 74, W - 56, 44, 16); x.fill();
+  if (f > 0) { x.fillStyle = f > 0.6 ? '#3bff7a' : f > 0.3 ? '#ffd84d' : '#ff3b3b'; rr(x, 28, 74, Math.max(24, (W - 56) * f), 44, 16); x.fill(); }
+  x.fillStyle = '#fff'; x.font = '800 40px system-ui, sans-serif'; x.textBaseline = 'middle';
+  x.textAlign = 'left'; x.fillText('HP ' + myHealth, 32, 44);
+  x.textAlign = 'right'; x.fillText('BLU ' + teamScore.blue + '  ·  ' + teamScore.red + ' ROSSI', W - 32, 44);
+  if (dead) { x.textAlign = 'center'; x.fillStyle = '#ff6b6b'; x.fillText('ELIMINATO · ' + Math.max(0, Math.ceil(respawnT)) + 's', W / 2, 148); }
+  belt.userData.tex.needsUpdate = true;
+}
+
+function shockwave(pos, color, maxR) {
+  const m = new THREE.Mesh(
+    new THREE.RingGeometry(0.9, 1, 48).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false })
+  );
+  m.position.copy(pos); m.position.y += 0.05;
+  scene.add(m);
+  fx.push({ m, t: 0, max: maxR || 12 });
+}
+
+let capRing = null;
+function updateCapRing() {
+  if (!single.flag || inCaptureZoneTime <= 0.01) { if (capRing) capRing.visible = false; return; }
+  if (!capRing) {
+    capRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.95, 1, 48).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false })
+    );
+    scene.add(capRing);
+  }
+  capRing.visible = true;
+  capRing.material.color.setHex(COL[myTeam]);
+  capRing.position.set(single.flag.position.x, single.flag.position.y + 0.04, single.flag.position.z);
+  capRing.scale.setScalar(Math.max(0.02, (inCaptureZoneTime / 3.5) * 1.9));
+}
+
+function resetStats() {
+  teamScore.blue = teamScore.red = 0;
+  myHealth = 100; dead = false; invuln = 0; hurtFlash = 0;
+  drawBelt();
+}
+function hurt(d) {
+  if (gamePhase !== 'play' || dead || invuln > 0) return;
+  myHealth = Math.max(0, myHealth - d);
+  hurtFlash = 1;
+  audio.playHurt();
+  if (inAR) ctrls.forEach(c => buzz(c, 0.7, 90));
+  if (myHealth <= 0) die();
+  drawBelt();
+}
+function die() {
+  dead = true; respawnT = RESPAWN_S;
+  rightBlaster.visible = false;
+  say('ELIMINATO! Rinasci tra ' + RESPAWN_S + ' secondi', '#ff3b3b', RESPAWN_S);
+}
+function respawn() {
+  dead = false; myHealth = 100; invuln = 2;
+  rightBlaster.visible = (gamePhase === 'play');
+  say('DI NUOVO IN GIOCO!', '#3bff7a', 2);
+  drawBelt();
+}
+function onFlagCaptured(team, local) {
+  teamScore[team] += 100;
+  showFlagCapturedEffects(team);
+  drawBelt();
+  if (local && mpPeer) broadcast({ type: 'flag_capture', team });
+  if (teamScore[team] >= WIN_SCORE) endMatch(team);
+}
+function endMatch(team) {
+  gamePhase = 'ended';
+  rightBlaster.visible = false;
+  if (capRing) capRing.visible = false;
+  const pos = single.flag ? single.flag.position : new THREE.Vector3();
+  shockwave(pos, COL[team], 25);
+  say(team === 'blue' ? 'VINCONO I BLU!' : 'VINCONO I ROSSI!', team === 'blue' ? '#2f8bff' : '#ff4d4d', 8);
+  setTimeout(() => {
+    resetStats();
+    gamePhase = 'team_select';
+    placeTeamTerminal(true, 0);
+    updatePhaseUI();
+  }, 8000);
+}
+
+function updateHud(dt) {
+  const q = camera.quaternion, p = camera.position;
+  if (hudT > 0) {
+    hudT -= dt; hudMsg.visible = hudT > 0;
+    hudMsg.material.opacity = Math.min(1, hudT * 2.5);
+    _hv.set(0, 0.2, -1.2).applyQuaternion(q);
+    hudMsg.position.copy(p).add(_hv); hudMsg.quaternion.copy(q);
+  } else hudMsg.visible = false;
+  if (hurtFlash > 0) {
+    hurtFlash = Math.max(0, hurtFlash - dt * 1.6);
+    vig.visible = hurtFlash > 0; vig.material.opacity = hurtFlash * 0.85;
+    _hv.set(0, 0, -0.35).applyQuaternion(q);
+    vig.position.copy(p).add(_hv); vig.quaternion.copy(q);
+  } else vig.visible = false;
+  belt.visible = (gamePhase === 'play' || gamePhase === 'ended');
+  if (belt.visible) {
+    _bf.set(0, 0, -1).applyQuaternion(q); _bf.y = 0;
+    if (_bf.lengthSq() > 0.04) { _bf.normalize(); beltDir.lerp(_bf, 1 - Math.exp(-6 * dt)).normalize(); }
+    belt.position.set(p.x + beltDir.x * 0.5, p.y - 0.6, p.z + beltDir.z * 0.5);
+    belt.rotation.set(-0.85, Math.atan2(-beltDir.x, -beltDir.z), 0, 'YXZ');
+  }
+  if (dead) {
+    const s = Math.ceil(respawnT);
+    respawnT -= dt;
+    if (Math.ceil(respawnT) !== s) drawBelt();
+    if (respawnT <= 0) respawn();
+  }
+  if (invuln > 0) invuln -= dt;
+  for (let i = fx.length - 1; i >= 0; i--) {
+    const e = fx[i];
+    e.t += dt / 1.1;
+    if (e.t >= 1) { scene.remove(e.m); e.m.geometry.dispose(); e.m.material.dispose(); fx.splice(i, 1); continue; }
+    e.m.scale.setScalar(1 + e.t * e.max);
+    e.m.material.opacity = 0.9 * (1 - e.t);
+  }
+}
+drawBelt();
+
 function startMatchCountdown() {
   gamePhase = 'countdown';
+  resetStats();
   updatePhaseUI();
   updateBlasterColors();
 
@@ -1683,6 +1867,8 @@ function startMatchCountdown() {
 
 function showGameStartEffects() {
   audio.playGameStart();
+  if (single.flag) shockwave(single.flag.position, 0xffd84d, 22);
+  ['blue', 'red'].forEach(k => { if (single[k]) shockwave(single[k].position, COL[k], 14); });
   showBanner('⚔️ PARTITA INIZIATA! DOPPIE ARMI ATTIVE!');
 
   ['blue', 'red'].forEach(k => {
@@ -1712,6 +1898,8 @@ function showFlagCapturedEffects(team) {
   const pos = flagObj ? flagObj.position : new THREE.Vector3(0, 0, 0);
   const col = COL[team];
 
+  shockwave(pos, col, 10);
+  for (let i = 0; i < 6; i++) spawnImpactSparks(pos.clone().setY(pos.y + 1), new THREE.Vector3(0, 1, 0), team);
   showBanner('🚩 BANDIERA CONQUISTATA DAI ' + (team === 'blue' ? 'BLU' : 'ROSSI') + '! (+100 PT)');
 
   if (flagObj && flagObj.userData.flagObj && flagObj.userData.flagObj.userData.clothMesh) {
@@ -1857,7 +2045,7 @@ function handleNetMessage(m) {
     const dir = new THREE.Vector3(...m.dir);
     shootLaser(org, dir, m.team, m.isLeft, false);
   } else if (m.type === 'flag_capture') {
-    showFlagCapturedEffects(m.team);
+    onFlagCaptured(m.team, false);
   } else if (m.type === 'team_start') {
     startMatchCountdown();
   } else if (m.type === 'player_pose') {
@@ -1924,15 +2112,12 @@ function checkFlagCapture(dt) {
 
     if (inCaptureZoneTime >= 3.5) {
       inCaptureZoneTime = 0;
-      teamScore[myTeam] += 100;
-      const sc = document.getElementById('score-' + myTeam);
-      if (sc) sc.textContent = '(' + teamScore[myTeam] + ')';
-      showFlagCapturedEffects(myTeam);
-      if (mpPeer) broadcast({ type: 'flag_capture', team: myTeam });
+      onFlagCaptured(myTeam, true);
     }
   } else {
     inCaptureZoneTime = Math.max(0, inCaptureZoneTime - dt * 1.5);
   }
+  updateCapRing();
 }
 
 // ============================================================================
@@ -1944,6 +2129,7 @@ const btn = document.getElementById('btn');
 function showBanner(text) {
   const b = document.getElementById('banner');
   b.textContent = text;
+  say(text, '#ffd84d', 3.5);
   b.classList.add('show');
   setTimeout(() => b.classList.remove('show'), 3500);
 }
@@ -1956,6 +2142,7 @@ function refresh() {
 }
 
 let lastAnimT = performance.now();
+const _lp = new THREE.Vector3(), _lt = new THREE.Vector3(), _lc = new THREE.Vector3(), _lseg = new THREE.Line3();
 function animate(time) {
   const t = (time || performance.now()) / 1000;
   const now = performance.now();
@@ -1989,7 +2176,17 @@ function animate(time) {
   for (let i = 0; i < LASER_POOL_SIZE; i++) {
     const l = laserPool[i];
     if (l.active) {
+      _lp.copy(l.mesh.position);
       l.mesh.position.addScaledVector(l.dir, l.speed * dt);
+      if (l.remote && l.team !== myTeam && gamePhase === 'play' && !dead) {
+        l.travel += l.speed * dt;
+        if (l.travel < l.wallDist) {
+          _lseg.set(_lp, l.mesh.position);
+          _lt.copy(camera.position); _lt.y -= 0.3;
+          _lseg.closestPointToPoint(_lt, true, _lc);
+          if (_lc.distanceTo(_lt) < 0.5) { l.active = false; l.mesh.visible = false; hurt(HIT_DMG); }
+        }
+      }
       l.life -= dt;
       if (l.life <= 0) {
         l.active = false;
@@ -2029,10 +2226,11 @@ function animate(time) {
 
   if (renderer.xr.isPresenting) {
     updateAR();
-    if (gamePhase === 'play') updateRifle(dt);
+    if (gamePhase === 'play' && !dead) updateRifle(dt);
     else { rifleReady = false; twoHand = false; trigDown[0] = trigDown[1] = false; }
   }
   updateCountdownMesh(dt);
+  updateHud(dt);
 
   renderer.render(scene, camera);
 }
