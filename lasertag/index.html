@@ -1657,7 +1657,6 @@ const ctrls = [0, 1].map(i => {
   c.addEventListener('selectstart', () => {
     const u = c.userData;
     const isLeft = (u.hand === 'left');
-    if (calibNeeded()) { if (!isLeft) calibClick(c); return; }
 
     if (gamePhase === 'setup') {
       // Il controller SINISTRO porta solo il menu: non piazza nulla
@@ -1776,10 +1775,11 @@ function updateAR() {
       if (d && !u.prev[k]) f();
       u.prev[k] = d;
     };
+    // Click stick SINISTRO = raddrizza l'arena secondo dove guardi (sempre); stick DESTRO = procedi (in setup)
+    edge(3, () => { if (isLeft) recenterArena(); else if (isSetup && arenaIsReady()) goToTeamSelect(); });
     if (isSetup) {
       edge(4, () => { menuOpen = !menuOpen; drawToggle(); }); // Tasto X o A per aprire/chiudere menu
       edge(5, () => { undo(); });                              // Tasto Y o B per annullare
-      edge(3, () => { if (arenaIsReady()) goToTeamSelect(); }); // Click stick per procedere
     }
   });
 
@@ -1846,7 +1846,6 @@ function placeTeamTerminal(instant, dt) {
 }
 
 function goToTeamSelect() {
-  if (calibNeeded()) { showBanner("Prima allinea l'arena con l'host"); return; }
   if (!arenaIsReady()) {
     showBanner('Piazza prima Base BLU, Base ROSSA e Bandiera Centro!');
     return;
@@ -2290,10 +2289,6 @@ function broadcastArena() {
 function handleNetMessage(m, conn) {
   if (!m || !m.type) return;
   if (m.type === 'init_world' && !isHost && m.arena) {
-    if (conn && calibHostId !== conn.peer) {        // host diverso (o primo arrivo): serve allineare di nuovo
-      calibHostId = conn.peer; calibrated = false; calibStep = 0;
-      calib.x = calib.z = calib.yaw = 0;
-    }
     clearAll(true);
     (m.arena.walls || []).forEach(([x, z, a, k]) => walls.push(spawn(WSPEC[k] ? k : 'wall', x, z, a)));
     ['blue', 'red', 'flag'].forEach(k => {
@@ -2707,62 +2702,33 @@ function updateBots(dt) {
 }
 
 // ============================================================================
-// 14b. ANCORAGGIO ARENA + ARENA CONDIVISA (l'arena dell'host e' la stessa per tutti)
+// 14b. RADDRIZZA ARENA (sostituisce ancore e allineamento a 2 punti)
 // ============================================================================
-// Spazio di riferimento finale = ANCORA (tiene l'arena ferma nella stanza reale) composta con
-// CALIBRAZIONE (porta il sistema di coordinate dell'host dentro quello del visore di ogni ospite).
-// Cosi' muri, basi, bandiera, giocatori e colpi usano tutti le coordinate dell'host e coincidono ovunque.
-let xrBase = null, arenaAnchor = null, anchorState = 'none';   // none | pending | ok | failed
-const anchorPose = { x: 0, z: 0, yaw: 0 };    // posa dell'ancora nello spazio di base
-const calib = { x: 0, z: 0, yaw: 0 };         // posa del sistema "host" rispetto al sistema dell'ancora (identita' per l'host)
+// Ogni sessione AR parte con una nuova origine. Per rimettere l'arena dritta rispetto a te:
+// guarda nella direzione che vuoi sia "avanti" e premi il CLICK DELLO STICK SINISTRO (anche in partita).
+// L'origine dell'arena viene portata dove ti trovi e ruotata secondo il tuo sguardo.
+let xrBase = null, recenterReq = false;
+const calib = { x: 0, z: 0, yaw: 0 };         // posa del sistema dell'arena nello spazio di base del visore
 const lastRef = { x: 0, z: 0, yaw: 0 };       // ultimo allineamento applicato
-const _aQ = new THREE.Quaternion(), _aE = new THREE.Euler();
-
-// ---- Ancora PERSISTENTE: il visore la ricorda anche dopo essere usciti dall'AR, cosi' l'arena resta nello stesso punto della stanza.
-// Ogni sessione AR ha una nuova origine: senza ancora salvata muri e basi (ancora in memoria) si ritroverebbero spostati.
-const USE_ANCHORS = false;   // OFF: le ancore del visore possono ritrovare un punto sbagliato senza dare errori. Si usa il riallineamento a 2 punti.
-const ANCHOR_KEY = 'lt-anchor-v1';
-let anchorTried = false, anchorRestoring = false, anchorRestoreAt = 0, anchorLostAt = 0, anchorWarned = false;
-const arenaHasContent = () => walls.length > 0 || !!(single.blue || single.red || single.flag);
-function savedAnchorId() { try { return localStorage.getItem(ANCHOR_KEY) || ''; } catch (e) { return ''; } }
-function storeAnchorId(id) { try { if (id) localStorage.setItem(ANCHOR_KEY, id); else localStorage.removeItem(ANCHOR_KEY); } catch (e) {} }
-function persistArenaAnchor(session, a) {
-  if (!a || !a.requestPersistentAnchor) {
-    if (!anchorWarned) { anchorWarned = true; say('Ancora permanente non supportata: riallinea l\'arena a mano a ogni ingresso', '#ff9d4d', 4); }
-    return;
-  }
-  const old = savedAnchorId();
-  a.requestPersistentAnchor().then(id => {
-    storeAnchorId(id);
-    if (old && old !== id && session.deletePersistentAnchor) session.deletePersistentAnchor(old).catch(() => {});
-  }).catch(e => { console.warn('Ancora permanente non salvata:', e); if (!anchorWarned) { anchorWarned = true; say('Ancora permanente non salvata: riallinea l\'arena a mano a ogni ingresso', '#ff9d4d', 4); } });
-}
-function giveUpRestore(msg) {
-  anchorRestoring = false;
-  if (msg) say(msg, '#ff9d4d', 4);
-}
+const _aE = new THREE.Euler();
+const isGuest = () => !!mpPeer && !isHost;
 const rotXZ = (a, x, z) => [x * Math.cos(a) + z * Math.sin(a), -x * Math.sin(a) + z * Math.cos(a)];   // stessa convenzione di rotation.y
 
+function recenterArena() { recenterReq = true; }
+
 function resetArenaAnchor() {
-  try { if (arenaAnchor && arenaAnchor.delete) arenaAnchor.delete(); } catch (e) {}
-  arenaAnchor = null; xrBase = null; anchorState = 'none';
-  anchorPose.x = anchorPose.z = anchorPose.yaw = 0;
+  xrBase = null; recenterReq = false;
   calib.x = calib.z = calib.yaw = 0;
   lastRef.x = lastRef.z = lastRef.yaw = 0;
-  calibrated = false; calibStep = 0; calibHostId = null;
-  anchorTried = false; anchorRestoring = false; anchorLostAt = 0; anchorWarned = false;
-  world.visible = true;
   try { if (renderer.xr.setReferenceSpace) renderer.xr.setReferenceSpace(null); } catch (e) {}
 }
 
 function applyRefSpace() {
-  const r = rotXZ(anchorPose.yaw, calib.x, calib.z);
-  const fx = anchorPose.x + r[0], fz = anchorPose.z + r[1], fy = anchorPose.yaw + calib.yaw;
-  let dy = fy - lastRef.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-  if (Math.abs(fx - lastRef.x) > 0.002 || Math.abs(fz - lastRef.z) > 0.002 || Math.abs(dy) > 0.0015) {
-    lastRef.x = fx; lastRef.z = fz; lastRef.yaw = fy;
-    const q = { x: 0, y: Math.sin(fy / 2), z: 0, w: Math.cos(fy / 2) };
-    renderer.xr.setReferenceSpace(xrBase.getOffsetReferenceSpace(new XRRigidTransform({ x: fx, y: 0, z: fz }, q)));
+  const dy = Math.atan2(Math.sin(calib.yaw - lastRef.yaw), Math.cos(calib.yaw - lastRef.yaw));
+  if (Math.abs(calib.x - lastRef.x) > 0.002 || Math.abs(calib.z - lastRef.z) > 0.002 || Math.abs(dy) > 0.0015) {
+    lastRef.x = calib.x; lastRef.z = calib.z; lastRef.yaw = calib.yaw;
+    const q = { x: 0, y: Math.sin(calib.yaw / 2), z: 0, w: Math.cos(calib.yaw / 2) };
+    renderer.xr.setReferenceSpace(xrBase.getOffsetReferenceSpace(new XRRigidTransform({ x: calib.x, y: 0, z: calib.z }, q)));
   }
 }
 
@@ -2770,127 +2736,18 @@ function updateArenaAnchor(frame) {
   if (!frame || !renderer.xr.isPresenting) return;
   if (!xrBase) xrBase = renderer.xr.getReferenceSpace();            // lo spazio di base, prima di sostituirlo
   if (!xrBase || !renderer.xr.setReferenceSpace) return;
-
-  if (USE_ANCHORS && anchorState !== 'failed') {
-    if (!frame.createAnchor) { anchorState = 'failed'; if (!anchorWarned) { anchorWarned = true; say('Ancore non supportate: riallinea l\'arena a mano a ogni ingresso', '#ff9d4d', 4); } }
-    else if (!arenaAnchor) {
-      if (anchorState !== 'pending') {
-        anchorState = 'pending';
-        const saved = savedAnchorId();
-        if (!anchorTried && saved && arenaHasContent() && frame.session.restorePersistentAnchor) {
-          // arena gia' costruita: ritrovo l'ancora salvata (stesso punto della stanza di prima)
-          anchorTried = true; anchorRestoring = true; anchorRestoreAt = performance.now();
-          say('Ritrovo la posizione dell\'arena...', '#ffd84d', 3);
-          frame.session.restorePersistentAnchor(saved)
-            .then(a => { arenaAnchor = a; anchorState = 'ok'; anchorLostAt = 0; })
-            .catch(e => {
-              console.warn('Ancora salvata non ritrovata:', e);
-              storeAnchorId(''); anchorState = 'none';
-              giveUpRestore('Posizione arena non ritrovata: ricostruiscila');
-            });
-        } else {
-          const q = { x: 0, y: Math.sin(anchorPose.yaw / 2), z: 0, w: Math.cos(anchorPose.yaw / 2) };
-          frame.createAnchor(new XRRigidTransform({ x: anchorPose.x, y: 0, z: anchorPose.z }, q), xrBase)
-            .then(a => { arenaAnchor = a; anchorState = 'ok'; persistArenaAnchor(frame.session, a); })
-            .catch(e => { console.warn('Ancora spaziale non disponibile:', e); anchorState = 'failed'; if (!anchorWarned) { anchorWarned = true; say('Ancora non creata: riallinea l\'arena a mano a ogni ingresso', '#ff9d4d', 4); } });
-        }
-      }
-    } else {
-      const now = performance.now();
-      if (frame.trackedAnchors && !frame.trackedAnchors.has(arenaAnchor)) {
-        // ancora non (ancora) tracciata: aspetto qualche secondo prima di darla per persa e ricrearla dove era
-        if (!anchorLostAt) anchorLostAt = now;
-        if (now - anchorLostAt > 3000) { arenaAnchor = null; anchorState = 'none'; anchorLostAt = 0; anchorTried = true; anchorRestoring = false; }
-      } else anchorLostAt = 0;
-      const pose = arenaAnchor ? frame.getPose(arenaAnchor.anchorSpace, xrBase) : null;
-      if (pose) {                                                   // se il tracking manca tengo l'ultimo allineamento
-        const o = pose.transform.orientation;
-        _aQ.set(o.x, o.y, o.z, o.w); _aE.setFromQuaternion(_aQ, 'YXZ');
-        anchorPose.x = pose.transform.position.x; anchorPose.z = pose.transform.position.z; anchorPose.yaw = _aE.y;   // solo piano: il pavimento resta orizzontale
-        if (anchorRestoring) { anchorRestoring = false; realignNeeded = false; say('ARENA RITROVATA \u2713', '#3bff7a', 2); }
-      }
-    }
-    if (anchorRestoring && performance.now() - anchorRestoreAt > 8000) giveUpRestore('Posizione arena non ritrovata: ricostruiscila');
+  if (recenterReq) {
+    recenterReq = false;
+    // posa della testa nel sistema attuale -> diventa la nuova origine (solo piano: il pavimento resta orizzontale)
+    _aE.setFromQuaternion(camera.quaternion, 'YXZ');
+    const r = rotXZ(calib.yaw, camera.position.x, camera.position.z);
+    calib.x += r[0]; calib.z += r[1]; calib.yaw += _aE.y;
+    say('ARENA RADDRIZZATA \u2713', '#3bff7a', 2);
+    ctrls.forEach(k => buzz(k, 0.9, 120));
   }
-  world.visible = !anchorRestoring;   // finche' l'ancora non e' localizzata non mostro l'arena nel posto sbagliato
   applyRefSpace();
 }
 
-// ---- Calibrazione ospiti: 2 punti a terra reali (Base BLU e Base ROSSA) = stessa arena dell'host
-let calibrated = false, calibStep = 0, calibHostId = null, calibSayT = 0;
-const calibP0 = { x: 0, z: 0 };
-const isGuest = () => !!mpPeer && !isHost;
-// Riallineamento manuale a 2 punti (non dipende dalle ancore del visore): serve agli ospiti e a chi rientra in AR con un'arena gia' costruita
-let realignNeeded = false;
-const calibNeeded = () => inAR && !anchorRestoring && !!(single.blue && single.red) && !calibrated && (isGuest() ? mpConns.length > 0 : realignNeeded);
-
-const calibRing = new THREE.Mesh(new THREE.RingGeometry(0.1, 0.16, 40), new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, depthTest: false, transparent: true, opacity: 0.9 }));
-calibRing.rotation.x = -Math.PI / 2; calibRing.visible = false; calibRing.renderOrder = 10; scene.add(calibRing);
-const calibMark = new THREE.Mesh(new THREE.RingGeometry(0.1, 0.16, 40), new THREE.MeshBasicMaterial({ color: 0x2f8bff, side: THREE.DoubleSide, depthTest: false, transparent: true, opacity: 0.9 }));
-calibMark.rotation.x = -Math.PI / 2; calibMark.visible = false; calibMark.renderOrder = 10; scene.add(calibMark);
-
-function startCalibration() {
-  realignNeeded = true;
-  calibrated = false; calibStep = 0; calibSayT = 0; calibMark.visible = false;
-}
-
-function calibMsg() {
-  const own = !isGuest();
-  if (calibStep === 0) say(own ? 'RIALLINEA 1/2: punta la BASE BLU e premi il grilletto (grip sinistro = salta)' : 'ALLINEA 1/2: punta il centro della BASE BLU reale e premi il grilletto', '#2f8bff', 3);
-  else say(own ? 'RIALLINEA 2/2: punta la BASE ROSSA e premi il grilletto (grip sinistro = salta)' : 'ALLINEA 2/2: punta il centro della BASE ROSSA reale e premi il grilletto', '#ff4d4d', 3);
-}
-
-function calibClick(c) {
-  ctrlRay(c);
-  if (!ray.intersectPlane(plane, hit)) { say('Punta il raggio verso il pavimento', '#ff6b6b', 2); return; }
-  buzz(c, 0.7, 45);
-  if (calibStep === 0) {
-    calibP0.x = hit.x; calibP0.z = hit.z;
-    calibMark.position.set(hit.x, 0.012, hit.z); calibMark.visible = true;
-    calibStep = 1; calibSayT = 0;
-    return;
-  }
-  // punti misurati nel sistema corrente (ospite) e punti dell'arena nel sistema dell'host
-  const bh = single.blue.position, rh = single.red.position;
-  const vhx = rh.x - bh.x, vhz = rh.z - bh.z, vcx = hit.x - calibP0.x, vcz = hit.z - calibP0.z;
-  const dh = Math.hypot(vhx, vhz), dc = Math.hypot(vcx, vcz);
-  if (dc < 1.0 || Math.abs(dc - dh) > Math.max(0.8, dh * 0.15)) {
-    say('Punti non validi: tu ' + dc.toFixed(1) + ' m, arena ' + dh.toFixed(1) + ' m. Riprova', '#ff6b6b', 3.5);
-    calibStep = 0; calibMark.visible = false;
-    return;
-  }
-  const ang = (x, z) => Math.atan2(-z, x);                          // angolo con la convenzione di rotation.y
-  const th = ang(vcx, vcz) - ang(vhx, vhz);
-  const rb = rotXZ(th, bh.x, bh.z);
-  const tx = calibP0.x - rb[0], tz = calibP0.z - rb[1];             // P_ospite = R(th) P_host + t
-  const rc = rotXZ(calib.yaw, tx, tz);                              // compongo con la calibrazione precedente
-  calib.x += rc[0]; calib.z += rc[1]; calib.yaw += th;
-  calibrated = true; calibStep = 0;
-  calibMark.visible = false; calibRing.visible = false;
-  say(isGuest() ? 'ARENA ALLINEATA ✓' : 'ARENA RIALLINEATA ✓', '#3bff7a', 2.5);
-  ctrls.forEach(k => buzz(k, 0.9, 120));
-}
-
-function updateCalibration(dt) {
-  if (!calibNeeded()) { calibRing.visible = false; calibMark.visible = false; return; }
-  const c = ctrls.find(k => k.userData.hand !== 'left') || ctrls[0];
-  ctrlRay(c);
-  c.userData.line.visible = true;
-  if (ray.intersectPlane(plane, hit)) { calibRing.position.set(hit.x, 0.012, hit.z); calibRing.visible = true; }
-  else calibRing.visible = false;
-  calibSayT -= dt;
-  if (calibSayT <= 0) { calibSayT = 2.6; calibMsg(); }
-}
-
-// ripetere la calibrazione: grip sinistro (fuori partita)
-ctrls.forEach(c => c.addEventListener('squeezestart', () => {
-  if (inAR && !isGuest() && c.userData.hand === 'left' && calibNeeded()) {   // arena gia' al posto giusto: salto
-    realignNeeded = false; calibStep = 0; calibMark.visible = false; calibRing.visible = false;
-    say('Allineamento saltato', '#ffd84d', 2);
-    return;
-  }
-  if (inAR && gamePhase !== 'play' && c.userData.hand === 'left' && single.blue && single.red && (isGuest() ? calibrated : !calibNeeded())) startCalibration();
-}));
 
 // ============================================================================
 // 15. MAIN LOOP
@@ -3023,7 +2880,6 @@ function animate(time, frame) {
     if (gamePhase === 'play' && !dead) updateRifle(dt);
     else { rifleReady = false; twoHand = false; trigDown[0] = trigDown[1] = false; }
   }
-  updateCalibration(dt);
   updateCountdownMesh(dt);
   updateHud(dt);
   smoothRemotes(dt);
@@ -3037,10 +2893,9 @@ renderer.setAnimationLoop(animate);
 // ============================================================================
 async function startAR() {
   audio.ensure();
-  const session = await navigator.xr.requestSession('immersive-ar', { optionalFeatures: ['local-floor', 'anchors'] });
+  const session = await navigator.xr.requestSession('immersive-ar', { optionalFeatures: ['local-floor'] });
   scene.background = null;
   inAR = true;
-  realignNeeded = arenaHasContent();   // arena di una sessione precedente: va rimessa nel punto giusto
   document.getElementById('main-card').style.display = 'none';
   lastTime = performance.now();
   renderer.xr.setReferenceSpaceType('local-floor');
@@ -3050,6 +2905,8 @@ async function startAR() {
     try { await session.end(); } catch (_) {}
     throw e;
   }
+
+  say('Click STICK SINISTRO = raddrizza l\'arena dove guardi', '#ffd84d', 5);
 
   // All'ingresso in AR, assicura che il menu sia aperto e che il tool di posa sia attivo
   if (gamePhase === 'setup') {
