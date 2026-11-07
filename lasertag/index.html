@@ -1,0 +1,3145 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta charset="utf-8">
+<title>Laser Tag AR - Scuola Arena</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root {
+  --bg: #070b16;
+  --fg: #e8ecff;
+  --panel: rgba(10, 16, 32, 0.92);
+  --blue: #2f8bff;
+  --red: #ff3b3b;
+  --gold: #ffd84d;
+  box-sizing: border-box;
+}
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+canvas { display: block; touch-action: none; }
+
+/* Banner Notifiche Centrale */
+#banner {
+  position: fixed;
+  top: 75px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 24px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  background: rgba(12, 18, 38, 0.94);
+  border: 2px solid #ffd84d;
+  color: #fff;
+  box-shadow: 0 0 25px rgba(255, 216, 77, 0.35);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s, transform 0.3s;
+  z-index: 20;
+}
+#banner.show {
+  opacity: 1;
+  transform: translateX(-50%) scale(1.04);
+}
+
+/* Conto alla Rovescia Inizio Partita */
+#countdown-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 30;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+#countdown-number {
+  font-size: 110px;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 0 40px #2f8bff, 0 0 80px #2f8bff;
+  transform: scale(0.6);
+  transition: transform 0.25s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+/* Card principale */
+#main-card {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 92%;
+  max-width: 460px;
+  max-height: 94vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 26px 22px 18px;
+  text-align: center;
+  background: linear-gradient(180deg, rgba(14, 22, 48, 0.97), rgba(8, 12, 28, 0.97));
+  border: 2px solid rgba(80, 130, 255, 0.45);
+  border-radius: 26px;
+  box-shadow: 0 0 60px rgba(0, 0, 0, 0.85), 0 0 36px rgba(47, 139, 255, 0.28);
+  z-index: 50;
+  scrollbar-width: thin;
+}
+#main-logo { width: 92px; height: 92px; object-fit: contain; filter: drop-shadow(0 0 14px rgba(47, 139, 255, 0.55)); }
+#main-card h1 { margin: 2px 0 0; font-size: 28px; letter-spacing: 2px; text-transform: uppercase; }
+#main-card .sub { color: #8da2d8; font-size: 14px; margin: 2px 0 12px; letter-spacing: 1px; }
+.ar-pill {
+  display: inline-block; padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 700;
+  background: rgba(16, 24, 46, 0.9); border: 1px solid rgba(120, 150, 230, 0.35); color: #a8b8e0; margin-bottom: 16px;
+}
+.ar-pill.ok { color: #3bff7a; border-color: rgba(59, 255, 122, 0.45); }
+.ar-pill.no { color: #ff8d8d; border-color: rgba(255, 90, 90, 0.45); }
+.view { animation: viewIn 0.22s ease-out; }
+@keyframes viewIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.net-status {
+  padding: 10px 14px; border-radius: 12px; background: rgba(16, 24, 46, 0.85);
+  font-size: 13px; color: #a8b8e0; margin-bottom: 14px; line-height: 1.35;
+}
+.btn-col { display: flex; flex-direction: column; gap: 10px; }
+.btn-primary {
+  background: linear-gradient(135deg, #1e90ff, #0056b3); color: #fff; border: 0; border-radius: 999px;
+  padding: 14px 24px; font-size: 16px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 4px 15px rgba(30, 144, 255, 0.35); transition: transform 0.1s;
+}
+.btn-primary:active { transform: scale(0.97); }
+.btn-primary:disabled { background: #2f364d; color: #7f89a8; box-shadow: none; cursor: not-allowed; }
+.btn-host {
+  background: linear-gradient(135deg, #ffb52e, #d97a00); color: #1a1200; border: 0; border-radius: 999px;
+  padding: 14px 24px; font-size: 16px; font-weight: 800; cursor: pointer;
+  box-shadow: 0 4px 15px rgba(255, 170, 40, 0.3); transition: transform 0.1s;
+}
+.btn-host:active { transform: scale(0.97); }
+.btn-host.on { background: linear-gradient(135deg, #1fd081, #0e8f58); color: #fff; }
+.btn-back {
+  background: transparent; color: #8da2d8; border: 0; font-size: 14px; font-weight: 700; cursor: pointer; padding: 8px;
+}
+.btn-back:active { color: #fff; }
+
+/* Tasti modalita' */
+.mode-tile {
+  display: flex; align-items: center; gap: 14px; width: 100%; box-sizing: border-box; margin-bottom: 12px;
+  padding: 16px 18px; border-radius: 20px; cursor: pointer; text-align: left; color: #fff;
+  border: 2px solid transparent; transition: transform 0.1s, box-shadow 0.2s;
+}
+.mode-tile:active { transform: scale(0.98); }
+.mode-tile .mt-ico { font-size: 34px; line-height: 1; }
+.mode-tile .mt-txt { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.mode-tile .mt-txt b { font-size: 20px; letter-spacing: 0.5px; }
+.mode-tile .mt-txt small { font-size: 12.5px; opacity: 0.85; }
+.mode-tile .mt-arr { font-size: 30px; opacity: 0.7; }
+.mode-off {
+  background: linear-gradient(135deg, rgba(255, 90, 60, 0.30), rgba(255, 170, 40, 0.20));
+  border-color: rgba(255, 140, 60, 0.7); box-shadow: 0 4px 22px rgba(255, 120, 40, 0.22);
+}
+.mode-on {
+  background: linear-gradient(135deg, rgba(30, 144, 255, 0.34), rgba(0, 86, 179, 0.28));
+  border-color: rgba(77, 163, 255, 0.75); box-shadow: 0 4px 22px rgba(30, 144, 255, 0.25);
+}
+
+/* Impostazioni partita offline */
+.opt-title { text-align: left; font-size: 12px; font-weight: 800; letter-spacing: 1.5px; color: #8da2d8; text-transform: uppercase; margin: 6px 0 8px; }
+.chips { display: flex; gap: 8px; margin-bottom: 8px; }
+.chip {
+  flex: 1; padding: 11px 0; border-radius: 14px; font-size: 15px; font-weight: 800; cursor: pointer;
+  background: rgba(16, 24, 46, 0.9); color: #b9c6ee; border: 2px solid rgba(80, 110, 190, 0.4);
+}
+.chip.sel { background: linear-gradient(135deg, #ff8a3d, #e0561a); color: #fff; border-color: #ffb17a; box-shadow: 0 0 16px rgba(255, 120, 40, 0.4); }
+.chips.lv .chip { font-size: 13px; }
+.chips.lv .chip[data-w], .chips.lv .chip[data-m] { font-size: 12px; padding: 11px 4px; }
+.off-info { font-size: 13px; color: #c9d2f0; background: rgba(16, 24, 46, 0.85); border-radius: 12px; padding: 10px 12px; margin: 4px 0 14px; line-height: 1.4; }
+#main-card .hint { margin-top: 12px; font-size: 12px; color: #7f8fb8; line-height: 1.4; }
+#main-card .foot { margin-top: 12px; font-size: 10px; opacity: 0.55; line-height: 1.4; }
+</style>
+</head>
+<body>
+
+<div id="banner"></div>
+<div id="countdown-overlay"><div id="countdown-number">3</div></div>
+
+<!-- Card principale (pagina iniziale) -->
+<div id="main-card">
+  <img id="main-logo" alt="Logo">
+  <h1>Laser Tag AR</h1>
+  <div class="sub">Scuola Arena</div>
+  <div id="ar-status" class="ar-pill">Controllo AR...</div>
+
+  <!-- Schermata 1: scelta modalita' -->
+  <div id="view-home" class="view">
+    <button class="mode-tile mode-off" onclick="openOffline()">
+      <span class="mt-ico">&#129302;</span>
+      <span class="mt-txt"><b>Sfida Neon</b><small>Offline &middot; da solo contro i bot</small></span>
+      <span class="mt-arr">&rsaquo;</span>
+    </button>
+    <button class="mode-tile mode-on" onclick="openMulti()">
+      <span class="mt-ico">&#127760;</span>
+      <span class="mt-txt"><b>Multiplayer</b><small>Online &middot; con i tuoi amici</small></span>
+      <span class="mt-arr">&rsaquo;</span>
+    </button>
+  </div>
+
+  <!-- Schermata 2: Sfida Neon (offline contro i bot) -->
+  <div id="view-offline" class="view" style="display:none">
+    <div class="opt-title">Ambiente</div>
+    <div class="chips lv">
+      <button class="chip" data-w="0" onclick="setWorld(false)">&#127968; Stanza reale</button>
+      <button class="chip" data-w="1" onclick="setWorld(true)">&#127979; Mondo Istituto</button>
+    </div>
+    <div class="world-status" style="display:none;font-size:12px;color:#9fb4ee;margin:-2px 0 8px;text-align:left"></div>
+    <div class="opt-title">Modalit&agrave; di gioco</div>
+    <div class="chips lv">
+      <button class="chip" data-m="flag" onclick="setGameMode('flag')">&#128681; Conquista la bandiera</button>
+      <button class="chip" data-m="dm" onclick="setGameMode('dm')">&#127919; Solo sparatoria</button>
+    </div>
+    <div class="opt-title">Formato partita</div>
+    <div class="chips" id="chips-fmt">
+      <button class="chip" data-n="1" onclick="setFormat(1)">1v1</button>
+      <button class="chip" data-n="2" onclick="setFormat(2)">2v2</button>
+      <button class="chip" data-n="3" onclick="setFormat(3)">3v3</button>
+      <button class="chip" data-n="4" onclick="setFormat(4)">4v4</button>
+      <button class="chip" data-n="5" onclick="setFormat(5)">5v5</button>
+    </div>
+    <div class="opt-title">Difficolt&agrave; dei bot</div>
+    <div class="chips lv" id="chips-lv">
+      <button class="chip" data-l="easy" onclick="setLevel('easy')">Recluta</button>
+      <button class="chip" data-l="medium" onclick="setLevel('medium')">Soldato</button>
+      <button class="chip" data-l="hard" onclick="setLevel('hard')">Veterano</button>
+    </div>
+    <div id="off-info" class="off-info"></div>
+    <div class="btn-col">
+      <button id="btn-off" class="btn-primary" disabled>Controllo AR...</button>
+      <button class="btn-back" onclick="goHome()">&lsaquo; Indietro</button>
+    </div>
+    <div class="hint" id="off-hint"></div>
+  </div>
+
+  <!-- Schermata 3: Multiplayer -->
+  <div id="view-multi" class="view" style="display:none">
+    <div id="net-status" class="net-status">Crea la partita (Host) oppure inserisci il codice stanza</div>
+    <div class="opt-title">Ambiente (lo sceglie l'host)</div>
+    <div class="chips lv">
+      <button class="chip" data-w="0" onclick="setWorld(false)">&#127968; Stanza reale</button>
+      <button class="chip" data-w="1" onclick="setWorld(true)">&#127979; Mondo Istituto</button>
+    </div>
+    <div class="world-status" style="display:none;font-size:12px;color:#9fb4ee;margin:-2px 0 8px;text-align:left"></div>
+    <div class="opt-title">Modalit&agrave; (la sceglie l'host)</div>
+    <div class="chips lv">
+      <button class="chip" data-m="flag" onclick="setGameMode('flag')">&#128681; Conquista la bandiera</button>
+      <button class="chip" data-m="dm" onclick="setGameMode('dm')">&#127919; Solo sparatoria</button>
+    </div>
+    <div class="btn-col">
+      <button id="btn" class="btn-primary" disabled>Controllo AR...</button>
+      <button id="btn-host" class="btn-host" onclick="becomeHost()">&#128081; Sono l'Host &mdash; crea la partita</button>
+      <div style="display:flex;gap:8px">
+        <input id="room-input" maxlength="4" placeholder="CODICE" autocomplete="off" style="flex:1;min-width:0;border-radius:999px;border:2px solid #2a3a6a;background:#0e1424;color:#fff;font-size:18px;font-weight:800;letter-spacing:4px;text-align:center;text-transform:uppercase;padding:10px">
+        <button class="btn-primary" onclick="joinRoom()">Entra</button>
+      </div>
+      <button class="btn-back" onclick="goHome()">&lsaquo; Indietro</button>
+    </div>
+    <div class="hint">Il primo visore preme <b>Host</b> e legge il <b>codice stanza</b> di 4 caratteri. Gli altri lo scrivono e premono <b>Entra</b> (da 1v1 fino a 5v5, max 10 giocatori). Solo l'host avvia la partita.</div>
+  </div>
+
+  <div class="foot">versione muri v2<br>Modello 3D &laquo;Kalashnikov&raquo; di Freppen (Sketchfab), licenza CC BY 4.0</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>window.THREE||document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"><\/script>')</script>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script>(window.THREE&&THREE.GLTFLoader)||document.write('<script src="https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js"><\/script>')</script>
+<script>window.Peer||document.write('<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"><\/script>')</script>
+
+<script>
+// ============================================================================
+// 1. STATI DI GIOCO & CONFIGURAZIONE FASI
+// ============================================================================
+// Fasi di gioco:
+// - 'setup':       Fase 1 - Piazzamento muri, basi e bandiera. Menu 3D aperto e funzionante!
+// - 'team_select': Fase 2 - Scelta squadra (Blu o Rossa) in 3D VR o 2D.
+// - 'countdown':   Conto alla rovescia 3-2-1 con effetti olografici e audio.
+// - 'play':        Fase 3 - Partita attiva! Solo armi a due mani (destra e sinistra), zero menu di costruzione.
+let gamePhase = 'setup';
+let myTeam = 'blue';
+let myPlayerName = 'Giocatore ' + Math.floor(100 + Math.random() * 900);
+let myHealth = 100;
+let teamScore = { blue: 0, red: 0 };
+let inAR = false;
+let tool = null; // Nessun oggetto preselezionato: si sceglie dal menu sul polso sinistro
+let ang = 0;
+let offline = false;          // modalita' "Sfida Neon": partita contro i bot, senza rete
+let offlineN = 2;             // formato: NvN
+let botLevel = 'medium';      // easy | medium | hard
+let gameMode = 'flag';        // 'flag' = conquista la bandiera | 'dm' = solo sparatoria (niente bandiera)
+const KILL_WIN = 20;          // solo sparatoria: vince la prima squadra a 20 eliminazioni
+let lastAttacker = '';
+
+const WALL = { w: 1.40, h: 1.5, t: 0.54 };
+const COL = { blue: 0x2f8bff, red: 0xff3b3b, flag: 0xffd84d };
+const TOOLS = ['wall', 'wall2', 'blue', 'red', 'flag'];
+const isWall = t => t === 'wall' || t === 'wall2';
+const NAMES = {
+  wall: 'Muro Basso Logo',
+  wall2: 'Muro Alto Logo',
+  blue: 'Base BLU',
+  red: 'Base ROSSA',
+  flag: 'Bandiera Centro',
+  undo: 'Annulla',
+  clear: 'Svuota'
+};
+const KEY = 'lasertag-arena-v3';
+
+// ============================================================================
+// 2. OTTIMIZZAZIONE GRAFICA & ANTI-LAG (Zero Garbage Collection)
+// ============================================================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x070b16);
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.05, 200);
+
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  alpha: true,
+  powerPreference: 'high-performance'
+});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.8));
+renderer.setSize(innerWidth, innerHeight);
+renderer.xr.enabled = true;
+renderer.shadowMap.enabled = false; // Disabilitato per 90fps stabili in AR passthrough
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x182442, 0.95));
+const sun = new THREE.DirectionalLight(0xffffff, 0.85);
+sun.position.set(6, 14, 5);
+scene.add(sun);
+
+
+const world = new THREE.Group();
+scene.add(world);
+const ghostRoot = new THREE.Group();
+scene.add(ghostRoot);
+
+// Caching rapido dei mesh muri per raycast anti-lag negli spari
+const cachedWallMeshes = [];
+function rebuildWallCache() {
+  world.updateMatrixWorld(true);
+  cachedWallMeshes.length = 0;
+  walls.forEach(w => w.traverse(m => { if (m.isMesh) cachedWallMeshes.push(m); }));
+}
+
+// ============================================================================
+// 3. AUDIO SYNTHESIZER (Web Audio API)
+// ============================================================================
+class SoundEngine {
+  constructor() { this.ctx = null; }
+  ensure() {
+    if (!this.ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new AC();
+    }
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+  }
+  playShoot(team, isLeft = false, vol = 1) {
+    this.ensure();
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    const pan = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : null;
+
+    osc.type = 'sawtooth';
+    const startFreq = team === 'red' ? 840 : 980;
+    osc.frequency.setValueAtTime(startFreq, t);
+    osc.frequency.exponentialRampToValueAtTime(70, t + 0.11);
+
+    gain.gain.setValueAtTime(0.35 * vol, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.11);
+
+    if (pan) {
+      pan.pan.setValueAtTime(isLeft ? -0.35 : 0.35, t);
+      osc.connect(gain);
+      gain.connect(pan);
+      pan.connect(this.ctx.destination);
+    } else {
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+    }
+    osc.start(t);
+    osc.stop(t + 0.12);
+  }
+  playWallHit() {
+    this.ensure();
+    const t = this.ctx.currentTime;
+    const bufSize = Math.floor(this.ctx.sampleRate * 0.06);
+    const buffer = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.2));
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1700, t);
+    filter.Q.value = 3.5;
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.28, t);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.ctx.destination);
+    noise.start(t);
+  }
+  playCountdown(val) {
+    this.ensure();
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(val === 1 ? 920 : 680, t);
+    gain.gain.setValueAtTime(0.35, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.18);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.19);
+  }
+  playGameStart() {
+    this.ensure();
+    const t = this.ctx.currentTime;
+    [440, 554, 659, 880].forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(freq * 0.8, t);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.5, t + 0.45);
+      gain.gain.setValueAtTime(0.2, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.55 + idx * 0.05);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.65);
+    });
+  }
+  playCaptureSuccess(team) {
+    this.ensure();
+    const t = this.ctx.currentTime;
+    const notes = team === 'blue' ? [523, 659, 784, 1046] : [440, 554, 659, 880];
+    notes.forEach((freq, i) => {
+      const st = t + i * 0.09;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, st);
+      gain.gain.setValueAtTime(0.3, st);
+      gain.gain.exponentialRampToValueAtTime(0.01, st + 0.25);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(st);
+      osc.stop(st + 0.26);
+    });
+  }
+  playHit() {
+    this.ensure();
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(1500, t);
+    osc.frequency.exponentialRampToValueAtTime(700, t + 0.06);
+    gain.gain.setValueAtTime(0.12, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.07);
+    osc.connect(gain); gain.connect(this.ctx.destination);
+    osc.start(t); osc.stop(t + 0.08);
+  }
+  playHurt() {
+    this.ensure();
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(320, t);
+    osc.frequency.exponentialRampToValueAtTime(70, t + 0.22);
+    gain.gain.setValueAtTime(0.35, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.25);
+    osc.connect(gain); gain.connect(this.ctx.destination);
+    osc.start(t); osc.stop(t + 0.26);
+  }
+}
+const audio = new SoundEngine();
+
+// ============================================================================
+// 4. MATERIALI & LOGO SCUOLA
+// ============================================================================
+const LOGO_SRC = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZoAAAGaCAYAAAA2BoVjAAAWfmNhQlgAABZ+anVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAFlhqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOmExZGZmMjFiLTNlYWYtNGUxNi1iOGI5LWRkOGZjNzczYzA5MwAAAAOTanVtYgAAAClqdW1kYzJhcwARABCAAACqADibcQNjMnBhLmFzc2VydGlvbnMAAAAAuGp1bWIAAABEanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5pbmdyZWRpZW50LnYzAAAAABhjMnNoBnDD8vpGDU9SanloYfvtbgAAAGxjYm9yo2lkYzpmb3JtYXRpaW1hZ2UvcG5namluc3RhbmNlSUR4LHhtcDppaWQ6NzA2ZDVhYWYtMzUyOC00NDdiLWFmOGYtNWE0OTZmZDgyM2QybHJlbGF0aW9uc2hpcGhwYXJlbnRPZgAAAeJqdW1iAAAAQWp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuYWN0aW9ucy52MgAAAAAYYzJzaInncO+M2JrvcVG2jMRbEwoAAAGZY2JvcqJnYWN0aW9uc4KiZmFjdGlvbmtjMnBhLm9wZW5lZGpwYXJhbWV0ZXJzoWtpbmdyZWRpZW50c4GiY3VybHgtc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5pbmdyZWRpZW50LnYzZGhhc2hYIMmElCxD1BN9XHnCfS6tC4cy3xPJsrJ+JeY7sFpybEhApGZhY3Rpb254HWNvbS5hbnRocm9waWMuY2xhdWRlLnByb3ZpZGVkanBhcmFtZXRlcnOheB9jb20uYW50aHJvcGljLm9yaWdpbi1jb25maWRlbmNlZ3Vua25vd25rZGVzY3JpcHRpb254ZkNsYXVkZSBwcm92aWRlZCB0aGlzIGZpbGUgYXQgdGhlIHJlcXVlc3Qgb2YgYSB1c2VyIGFuZCBtYXkgaGF2ZSBjcmVhdGVkIG9yIG1vZGlmaWVkIHRoZSBmaWxlIGNvbnRlbnRzLm1zb2Z0d2FyZUFnZW50oWRuYW1lZkNsYXVkZXJhbGxBY3Rpb25zSW5jbHVkZWT1AAAAyGp1bWIAAABAanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5oYXNoLmRhdGEAAAAAGGMyc2i1sRYWGMdmTA8w2T3COpd6AAAAgGNib3KlY2FsZ2ZzaGEyNTZjcGFkTQAAAAAAAAAAAAAAAABkaGFzaFggpfCHzZ/zKK5Z6nGqtlzcS3hP/tajY9NUQ+ckWjGex4pkbmFtZW5qdW1iZiBtYW5pZmVzdGpleGNsdXNpb25zgaJlc3RhcnQYIWZsZW5ndGgZFooAAAI+anVtYgAAACdqdW1kYzJjbAARABCAAACqADibcQNjMnBhLmNsYWltLnYyAAAAAg9jYm9ypWNhbGdmc2hhMjU2aXNpZ25hdHVyZXhNc2VsZiNqdW1iZj0vYzJwYS91cm46YzJwYTphMWRmZjIxYi0zZWFmLTRlMTYtYjhiOS1kZDhmYzc3M2MwOTMvYzJwYS5zaWduYXR1cmVqaW5zdGFuY2VJRHgseG1wOmlpZDo0NzFmNzE3Mi04ODUxLTRlMzctODk0ZS1iODUzZTI3MTIzZjRyY3JlYXRlZF9hc3NlcnRpb25zg6JjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggyYSULEPUE31cecJ9Lq0LhzLfE8mysn4l5juwWnJsSECiY3VybHgqc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5hY3Rpb25zLnYyZGhhc2hYIPZvv8uR7ieuLTHZv16RHovAsDDxYabQjtBfGwY0l3ovomN1cmx4KXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaGFzaC5kYXRhZGhhc2hYIE7zXIOFca6VkIKW51lt3VP8DwWylDYoEHiegGfxGZK/dGNsYWltX2dlbmVyYXRvcl9pbmZvo2RuYW1lb0FudGhyb3BpYyBGaWxlc2d2ZXJzaW9uZTEuMC4wa3NwZWNWZXJzaW9uZTIuNC4wAAAQOGp1bWIAAAAoanVtZGMyY3MAEQAQgAAAqgA4m3EDYzJwYS5zaWduYXR1cmUAAAAQCGNib3LShFkCEqIBJhghWQIKMIICBjCCAY2gAwIBAgIUQOWgCu7COdC+uIP6BkIFPWdVEwAwCgYIKoZIzj0EAwMwSTEXMBUGA1UEChMOQW50aHJvcGljLCBQQkMxLjAsBgNVBAMTJUFudGhyb3BpYyBDb250ZW50IENyZWRlbnRpYWxzIFJvb3QgQ0EwHhcNMjYwODA3MTg0MzU2WhcNMjgwODA2MTk0MzU2WjBEMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEpMCcGA1UEAxMgQW50aHJvcGljIENsYXVkZSBDb250ZW50IFNpZ25pbmcwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAASYegpry1AYBRTVNL1CpTlbROnY3dey+UrsF9C3phYrATN3ZHf93Mo8RQN0KOUuOn19P4oWNFWe5n2/She9N7eTo1gwVjAOBgNVHQ8BAf8EBAMCB4AwFQYDVR0lBA4wDAYKKwYBBAGD6F4CATAMBgNVHRMBAf8EAjAAMB8GA1UdIwQYMBaAFM5R4gSBTmRbI/jjxM+aPpzB11zCMAoGCCqGSM49BAMDA2cAMGQCMDFzHRSeAXrSy1WOzkbhPZ6Km2wGTmZ/2gK18k8BQGXyqz88Rdrz6CTX9flAnYNVxgIwcF9c3fVhqmJKpi+UhasNUMko69cyX6STPfta3Q8EjyzDjzoyrol46FP6VFHhvUcJoWNwYWRZDZ4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA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';
+const logoMat = new THREE.MeshStandardMaterial({
+  color: 0xffffff,
+  roughness: 0.8,
+  transparent: true,
+  opacity: 0,
+  alphaTest: 0.05,
+  polygonOffset: true,
+  polygonOffsetFactor: -2,
+  polygonOffsetUnits: -2,
+  emissive: 0xffffff,
+  emissiveIntensity: 0.45
+});
+const logoImg = new Image();
+logoImg.crossOrigin = 'anonymous';
+logoImg.onload = () => {
+  const t = new THREE.Texture(logoImg);
+  t.anisotropy = 4;
+  t.needsUpdate = true;
+  logoMat.map = t;
+  logoMat.emissiveMap = t;
+  logoMat.opacity = 1;
+  logoMat.needsUpdate = true;
+  createFlagTextures();
+};
+logoImg.src = LOGO_SRC;
+
+const rngf = seed => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+function makeConcrete() {
+  const S = 1024, c = document.createElement('canvas');
+  c.width = c.height = S;
+  const x = c.getContext('2d'), r = rngf(42);
+  x.fillStyle = '#545657';
+  x.fillRect(0, 0, S, S);
+
+  for (let i = 0; i < 60; i++) {
+    const px = r() * S, py = r() * S, rad = 40 + r() * 160;
+    const dark = r() < 0.6;
+    const g = x.createRadialGradient(px, py, 0, px, py, rad);
+    const col = dark ? 'rgba(22,23,24,' : 'rgba(160,165,160,';
+    g.addColorStop(0, col + (0.1 + r() * 0.18) + ')');
+    g.addColorStop(1, col + '0)');
+    x.fillStyle = g;
+    x.fillRect(px - rad, py - rad, rad * 2, rad * 2);
+  }
+
+  for (let i = 0; i < 18000; i++) {
+    const l = 60 + (r() * 120 | 0);
+    x.fillStyle = `rgba(${l},${l},${l-4},${0.08 + r() * 0.25})`;
+    x.fillRect(r() * S, r() * S, 1 + r() * 2.5, 1 + r() * 2.5);
+  }
+
+  for (const y of [6, S / 2, S - 6]) {
+    x.fillStyle = 'rgba(15,16,18,.65)'; x.fillRect(0, y, S, 6);
+    x.fillStyle = 'rgba(200,205,200,.25)'; x.fillRect(0, y + 6, S, 3);
+  }
+  for (const xp of [6, S / 2, S - 6]) {
+    x.fillStyle = 'rgba(15,16,18,.65)'; x.fillRect(xp, 0, 6, S);
+    x.fillStyle = 'rgba(200,205,200,.25)'; x.fillRect(xp + 6, 0, 3, S);
+  }
+
+  const holes = [[S * 0.25, S * 0.25], [S * 0.75, S * 0.25], [S * 0.25, S * 0.75], [S * 0.75, S * 0.75]];
+  holes.forEach(([hx, hy]) => {
+    x.beginPath(); x.arc(hx, hy, 16, 0, Math.PI * 2); x.fillStyle = 'rgba(20,20,22,0.85)'; x.fill();
+    x.beginPath(); x.arc(hx, hy, 8, 0, Math.PI * 2); x.fillStyle = '#0a0a0c'; x.fill();
+  });
+
+  x.save();
+  const hzHeight = 70;
+  x.beginPath(); x.rect(0, S - hzHeight, S, hzHeight); x.clip();
+  x.fillStyle = '#d49b10'; x.fillRect(0, S - hzHeight, S, hzHeight);
+  x.fillStyle = '#1c1c1a';
+  for (let sx = -hzHeight; sx < S + hzHeight; sx += 50) {
+    x.beginPath(); x.moveTo(sx, S); x.lineTo(sx + 35, S); x.lineTo(sx + 35 + hzHeight, S - hzHeight); x.lineTo(sx + hzHeight, S - hzHeight); x.closePath(); x.fill();
+  }
+  x.restore();
+
+  const crack = (px, py, ang, n, w) => {
+    x.beginPath(); x.moveTo(px, py);
+    for (let i = 0; i < n; i++) {
+      ang += (r() - 0.5) * 1.2; px += Math.cos(ang) * (14 + r() * 22); py += Math.sin(ang) * (14 + r() * 22);
+      x.lineTo(px, py);
+      if (r() < 0.25 && n > 4) crack(px, py, ang + (r() - 0.5) * 2, n >> 1, w * 0.7);
+      x.moveTo(px, py);
+    }
+    x.strokeStyle = 'rgba(20,20,20,.75)'; x.lineWidth = w; x.stroke();
+  };
+  for (let i = 0; i < 8; i++) crack(80 + r() * (S - 160), 80 + r() * (S - 160), r() * 6.28, 8 + (r() * 8 | 0), 2.2);
+
+  for (let i = 0; i < 12; i++) {
+    const px = 100 + r() * (S - 200), py = 100 + r() * (S - 200), rad = 9 + r() * 12;
+    const sp = x.createRadialGradient(px, py, rad * 0.5, px, py, rad * 4);
+    sp.addColorStop(0, 'rgba(15,15,15,.95)'); sp.addColorStop(0.4, 'rgba(35,35,35,.6)'); sp.addColorStop(1, 'rgba(35,35,35,0)');
+    x.fillStyle = sp; x.fillRect(px - rad * 4, py - rad * 4, rad * 8, rad * 8);
+
+    const cr = x.createRadialGradient(px, py, 0, px, py, rad);
+    cr.addColorStop(0, '#050505'); cr.addColorStop(0.7, '#1f1e1c'); cr.addColorStop(1, '#696864');
+    x.fillStyle = cr; x.beginPath(); x.arc(px, py, rad, 0, Math.PI * 2); x.fill();
+  }
+
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return t;
+}
+
+function boxGeo(w, h, d) {
+  const g = new THREE.BoxGeometry(w, h, d), uv = g.attributes.uv, T = 1.2;
+  const sc = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
+  for (let f = 0; f < 6; f++) {
+    for (let v = 0; v < 4; v++) {
+      const i = f * 4 + v;
+      uv.setXY(i, uv.getX(i) * sc[f][0] / T, uv.getY(i) * sc[f][1] / T);
+    }
+  }
+  return g;
+}
+
+const concTex = makeConcrete();
+const concMat = new THREE.MeshStandardMaterial({
+  map: concTex, bumpMap: concTex, bumpScale: 1.4, roughness: 0.95, metalness: 0.1,
+  emissive: 0x18191a, emissiveMap: concTex, emissiveIntensity: 0.55
+});
+const rebarMat = new THREE.MeshStandardMaterial({ color: 0x5e331c, roughness: 0.85, metalness: 0.4 });
+const metalMat = new THREE.MeshStandardMaterial({ color: 0x2c3340, roughness: 0.4, metalness: 0.8 });
+const ghostMat = new THREE.MeshBasicMaterial({ color: 0x66ff99, transparent: true, opacity: 0.45 });
+
+const WSPEC = {
+  // Muro BASSO: copertura leggera, ci si sporge per sparare
+  wall:  { w: 1.40, h: 1.50, fh: 0.20, fd: 0.78, bd: 0.54, ch: 0.12, cd: 0.64, logo: 0.84 },
+  // Muro ALTO: bunker che protegge tutto il corpo
+  wall2: { w: 1.55, h: 1.95, fh: 0.22, fd: 0.84, bd: 0.60, ch: 0.14, cd: 0.72, logo: 0.98 }
+};
+
+const wallCache = {};
+function prepWall(s) {
+  const bh = s.h - s.fh - s.ch;
+  return {
+    bh,
+    foot: boxGeo(s.w + 0.14, s.fh, s.fd),
+    body: boxGeo(s.w, bh, s.bd),
+    cap: boxGeo(s.w + 0.07, s.ch, s.cd),
+    logo: new THREE.PlaneGeometry(s.logo, s.logo)
+  };
+}
+
+function buildWall(kind, ghost) {
+  const s = WSPEC[kind], C = wallCache[kind] || (wallCache[kind] = prepWall(s));
+  const g = new THREE.Group(), mat = ghost ? ghostMat : concMat;
+
+  const foot = new THREE.Mesh(C.foot, mat); foot.position.y = s.fh / 2;
+  const body = new THREE.Mesh(C.body, mat); body.position.y = s.fh + C.bh / 2;
+  const cap = new THREE.Mesh(C.cap, mat); cap.position.y = s.fh + C.bh + s.ch / 2;
+  g.add(foot, body, cap);
+
+  if (ghost) return g;
+
+  // Logo direttamente sul cemento (PNG trasparente), su entrambe le facce, senza cornice nera
+  [1, -1].forEach(side => {
+    const lm = new THREE.Mesh(C.logo, logoMat);
+    lm.position.set(0, s.fh + C.bh / 2, side * (s.bd / 2 + 0.004));
+    if (side < 0) lm.rotation.y = Math.PI;
+    g.add(lm);
+  });
+  return g;
+}
+
+// ============================================================================
+// 4b. COLLISIONI MURI (colpi + persone)
+// ============================================================================
+// Ogni muro e' fatto di 3 box (basamento, corpo, cappello), ruotati in Y come il muro.
+// I test sono geometrici (non raycast sulle mesh): funzionano anche se il punto di partenza e' GIA' dentro il muro.
+const WBOX = {};
+Object.keys(WSPEC).forEach(k => {
+  const w = WSPEC[k], bh = w.h - w.fh - w.ch;
+  WBOX[k] = [
+    { hw: (w.w + 0.14) / 2, hd: w.fd / 2, y0: 0, y1: w.fh },
+    { hw: w.w / 2, hd: w.bd / 2, y0: w.fh, y1: w.fh + bh },
+    { hw: (w.w + 0.07) / 2, hd: w.cd / 2, y0: w.fh + bh, y1: w.h }
+  ];
+});
+
+let _s0 = 0, _s1 = 1, _sAx = -1, _sSg = 0;
+function _slab(a, d, lo, hi, ax) {
+  if (Math.abs(d) < 1e-9) return a >= lo && a <= hi;
+  let t0 = (lo - a) / d, t1 = (hi - a) / d, sg = -1;
+  if (t0 > t1) { const x = t0; t0 = t1; t1 = x; sg = 1; }
+  if (t0 > _s0) { _s0 = t0; _sAx = ax; _sSg = sg; }
+  if (t1 < _s1) _s1 = t1;
+  return _s0 <= _s1;
+}
+
+// Primo contatto del segmento A->B con un muro: ritorna t (0..1) oppure -1.
+// t = 0 se A e' gia' dentro un muro. Se out e' passato, riempie out.point e out.normal (mondo).
+function wallSegHit(A, B, out) {
+  const dy = B.y - A.y;
+  let best = 2, bnx = 0, bny = 1, bnz = 0;
+  for (let i = 0; i < walls.length; i++) {
+    const w = walls[i], boxes = WBOX[w.userData.kind];
+    if (!boxes) continue;
+    const c = Math.cos(w.rotation.y), sn = Math.sin(w.rotation.y);
+    const ax = A.x - w.position.x, az = A.z - w.position.z;
+    const bx = B.x - w.position.x, bz = B.z - w.position.z;
+    const lax = ax * c - az * sn, laz = ax * sn + az * c;
+    const ldx = (bx * c - bz * sn) - lax, ldz = (bx * sn + bz * c) - laz;
+    for (let j = 0; j < 3; j++) {
+      const b = boxes[j];
+      _s0 = 0; _s1 = 1; _sAx = -1; _sSg = 0;
+      if (_slab(lax, ldx, -b.hw, b.hw, 0) && _slab(A.y, dy, b.y0, b.y1, 1) && _slab(laz, ldz, -b.hd, b.hd, 2) && _s0 < best) {
+        best = _s0;
+        let nx = 0, ny = 0, nz = 0;
+        if (_sAx === 0) nx = _sSg; else if (_sAx === 1) ny = _sSg; else if (_sAx === 2) nz = _sSg;
+        else { nx = -ldx; ny = -dy; nz = -ldz; }
+        bnx = nx * c + nz * sn; bny = ny; bnz = -nx * sn + nz * c;
+      }
+    }
+  }
+  if (best > 1) return -1;
+  if (out) {
+    out.point.set(A.x + (B.x - A.x) * best, A.y + dy * best, A.z + (B.z - A.z) * best);
+    out.normal.set(bnx, bny, bnz);
+    if (out.normal.lengthSq() < 1e-8) out.normal.set(0, 1, 0); else out.normal.normalize();
+  }
+  return best;
+}
+
+// Un punto (con raggio r sul piano) e' dentro un muro? Usa l'ingombro massimo (basamento) per tutta l'altezza.
+function pointInWall(x, y, z, r) {
+  for (let i = 0; i < walls.length; i++) {
+    const w = walls[i], boxes = WBOX[w.userData.kind];
+    if (!boxes) continue;
+    const b = boxes[0];
+    if (y < 0 || y > boxes[2].y1) continue;
+    const c = Math.cos(w.rotation.y), sn = Math.sin(w.rotation.y);
+    const dx = x - w.position.x, dz = z - w.position.z;
+    const lx = dx * c - dz * sn, lz = dx * sn + dz * c;
+    if (Math.abs(lx) <= b.hw + r && Math.abs(lz) <= b.hd + r) return true;
+  }
+  return false;
+}
+
+const _wHit = { point: new THREE.Vector3(), normal: new THREE.Vector3() };
+const _wEnd = new THREE.Vector3(), _wEye = new THREE.Vector3(), _wChest = new THREE.Vector3();
+let playerInWall = false, wallWarnT = 0, wallFeedbackT = 0;
+
+// ============================================================================
+// 5. BANDIERE CON LOGO DELLA SCUOLA
+// ============================================================================
+const flagMaterials = {};
+function makeFlagCanvas(colorHex, strokeHex) {
+  const W = 512, H = 320, c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const x = c.getContext('2d');
+
+  const g = x.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, colorHex);
+  g.addColorStop(1, '#080d1a');
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+
+  for (let i = 0; i < W; i += 6) { x.fillStyle = 'rgba(255,255,255,0.04)'; x.fillRect(i, 0, 3, H); }
+  for (let j = 0; j < H; j += 6) { x.fillStyle = 'rgba(0,0,0,0.06)'; x.fillRect(0, j, W, 3); }
+
+  x.lineWidth = 14; x.strokeStyle = strokeHex; x.strokeRect(10, 10, W - 20, H - 20);
+  x.lineWidth = 4; x.strokeStyle = 'rgba(255,255,255,0.7)'; x.strokeRect(18, 18, W - 36, H - 36);
+
+  if (logoImg.complete && logoImg.width > 0) {
+    const sz = 180, cx = W / 2, cy = H / 2;
+    const glow = x.createRadialGradient(cx, cy, 10, cx, cy, sz * 0.7);
+    glow.addColorStop(0, 'rgba(255,255,255,0.4)');
+    glow.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = glow; x.beginPath(); x.arc(cx, cy, sz * 0.7, 0, Math.PI * 2); x.fill();
+    x.drawImage(logoImg, cx - sz / 2, cy - sz / 2, sz, sz);
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 4;
+  return tex;
+}
+
+function createFlagTextures() {
+  const configs = {
+    blue: { bg: '#104db8', st: '#4da3ff' },
+    red:  { bg: '#b81616', st: '#ff5a5a' },
+    flag: { bg: '#b89410', st: '#ffd84d' }
+  };
+  Object.keys(configs).forEach(k => {
+    const cfg = configs[k];
+    const tex = makeFlagCanvas(cfg.bg, cfg.st);
+    if (!flagMaterials[k]) {
+      flagMaterials[k] = new THREE.MeshStandardMaterial({
+        map: tex, side: THREE.DoubleSide, roughness: 0.65, metalness: 0.1,
+        emissive: 0x111111, emissiveMap: tex, emissiveIntensity: 0.35
+      });
+    } else {
+      flagMaterials[k].map = tex;
+      flagMaterials[k].emissiveMap = tex;
+      flagMaterials[k].needsUpdate = true;
+    }
+  });
+}
+createFlagTextures();
+
+function makeFlag(kind) {
+  const g = new THREE.Group();
+  const pole = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.032, 0.038, 2.4, 12),
+    new THREE.MeshStandardMaterial({ color: 0x222630, metalness: 0.9, roughness: 0.3 })
+  );
+  pole.position.y = 1.2;
+
+  const finial = new THREE.Mesh(
+    new THREE.ConeGeometry(0.06, 0.18, 12),
+    new THREE.MeshStandardMaterial({ color: 0xffd84d, metalness: 0.9, roughness: 0.2, emissive: 0xffaa00, emissiveIntensity: 0.5 })
+  );
+  finial.position.y = 2.45;
+
+  const clothGeo = new THREE.PlaneGeometry(0.85, 0.55, 24, 16);
+  clothGeo.translate(0.425, 0, 0);
+  const mat = flagMaterials[kind] || new THREE.MeshBasicMaterial({ color: COL[kind], side: THREE.DoubleSide });
+  const cloth = new THREE.Mesh(clothGeo, mat);
+  cloth.position.set(0.035, 1.95, 0);
+  cloth.userData.basePos = clothGeo.attributes.position.array.slice();
+  cloth.userData.isFlagCloth = true;
+  cloth.userData.flagKind = kind;
+
+  g.add(pole, finial, cloth);
+  g.userData.clothMesh = cloth;
+  return g;
+}
+
+function ring(r1, r2, color, y) {
+  const m = new THREE.Mesh(new THREE.RingGeometry(r1, r2, 48), new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }));
+  m.rotation.x = -Math.PI / 2; m.position.y = y; return m;
+}
+
+function makeObj(t, ghost) {
+  const g = new THREE.Group();
+  if (isWall(t)) return buildWall(t, ghost);
+  const color = COL[t];
+
+  const pad = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.9, 0.95, 0.08, 40),
+    new THREE.MeshStandardMaterial({ color: 0x1a2238, roughness: 0.4, metalness: 0.8, emissive: color, emissiveIntensity: ghost ? 0.2 : 0.6 })
+  );
+  pad.position.y = 0.04;
+
+  const innerRing = ring(0.72, 0.88, color, 0.085);
+  const flagObj = makeFlag(t);
+  g.add(pad, innerRing, flagObj);
+  g.userData.flagObj = flagObj;
+  return g;
+}
+
+// ============================================================================
+// 6. GESTIONE ARENA & SALVATAGGIO
+// ============================================================================
+const walls = [], single = { blue: null, red: null, flag: null }, history = [];
+const r3 = n => +n.toFixed(3), pack = o => [r3(o.position.x), r3(o.position.z), r3(o.rotation.y)];
+
+function save() {
+  try {
+    const data = {
+      walls: walls.map(o => [...pack(o), o.userData.kind]),
+      blue: single.blue && pack(single.blue),
+      red: single.red && pack(single.red),
+      flag: single.flag && pack(single.flag)
+    };
+    broadcastArena();
+  } catch (e) {}
+}
+
+function spawn(t, x, z, a) {
+  const o = makeObj(t, false);
+  o.userData.kind = t;
+  o.position.set(x, 0, z);
+  o.rotation.y = a;
+  world.add(o);
+  return o;
+}
+
+function place(t, x, z, a) {
+  if (gamePhase !== 'setup') return;
+  if (t === 'flag' && gameMode !== 'flag') return;   // solo sparatoria: niente bandiera
+  if (!inGym(x, z)) { say('Fuori dalla palestra: qui non si combatte', '#ff9d4d', 2); return; }
+  if (isGuest()) { if (gamePhase === 'setup') say("L'arena la costruisce l'host", '#ffd84d', 2); return; }
+  const o = spawn(t, x, z, a);
+  if (isWall(t)) {
+    walls.push(o);
+    history.push({ o, t });
+    rebuildWallCache();
+  } else {
+    const prev = single[t];
+    if (prev) world.remove(prev);
+    single[t] = o;
+    history.push({ o, t, prev });
+  }
+  save();
+  refresh();
+}
+
+function undo() {
+  if (gamePhase !== 'setup') return;
+  if (isGuest()) { if (gamePhase === 'setup') say("L'arena la costruisce l'host", '#ffd84d', 2); return; }
+  const h = history.pop();
+  if (!h) return;
+  world.remove(h.o);
+  if (isWall(h.t)) {
+    walls.splice(walls.indexOf(h.o), 1);
+    rebuildWallCache();
+  } else {
+    single[h.t] = h.prev || null;
+    if (h.prev) world.add(h.prev);
+  }
+  save();
+  refresh();
+}
+
+function removeNearest(x, z) {
+  if (gamePhase !== 'setup') return;
+  if (isGuest()) { if (gamePhase === 'setup') say("L'arena la costruisce l'host", '#ffd84d', 2); return; }
+  let best = null, bd = 1.3, bt = null;
+  [...walls.map(o => [o, o.userData.kind]), ...['blue', 'red', 'flag'].filter(k => single[k]).map(k => [single[k], k])].forEach(([o, t]) => {
+    const d = Math.hypot(o.position.x - x, o.position.z - z);
+    if (d < bd) { bd = d; best = o; bt = t; }
+  });
+  if (!best) return;
+  world.remove(best);
+  if (isWall(bt)) {
+    walls.splice(walls.indexOf(best), 1);
+    rebuildWallCache();
+  } else {
+    single[bt] = null;
+  }
+  const i = history.findIndex(h => h.o === best);
+  if (i >= 0) history.splice(i, 1);
+  save();
+  refresh();
+}
+
+function clearAll(force) {
+  if (!force && gamePhase !== 'setup') return;
+  if (!force && isGuest()) return;
+  [...walls, ...Object.values(single)].forEach(o => o && world.remove(o));
+  walls.length = 0;
+  single.blue = single.red = single.flag = null;
+  history.length = 0;
+  rebuildWallCache();
+  save();
+  refresh();
+}
+
+// L'arena NON viene salvata: ogni volta che si apre il sito si riparte da zero (cancello anche i vecchi salvataggi)
+try { localStorage.removeItem(KEY); } catch (e) {}
+
+const arenaIsReady = () => !!(single.blue && single.red && (gameMode === 'dm' || single.flag));
+
+// ---- Modalita': 'flag' (conquista la bandiera) o 'dm' (solo sparatoria: la bandiera non esiste e non si puo' piazzare)
+function setGameMode(m, fromNet) {
+  if (m !== 'flag' && m !== 'dm') return;
+  gameMode = m;
+  if (m === 'dm') {
+    if (single.flag) { world.remove(single.flag); single.flag = null; }
+    for (let i = history.length - 1; i >= 0; i--) if (history[i].t === 'flag') history.splice(i, 1);
+    if (tool === 'flag') tool = null;
+    ghosts.forEach(x => x.g.visible = false);
+  }
+  updateModeUi();
+  refresh();
+  if (!fromNet && isHost && mpPeer) broadcastArena();
+}
+function updateModeUi() {
+  document.querySelectorAll('.chip[data-m]').forEach(c => c.classList.toggle('sel', c.dataset.m === gameMode));
+  const h = document.getElementById('off-hint');
+  if (h) h.innerHTML = gameMode === 'dm'
+    ? 'Nel visore piazzi Base BLU e Base ROSSA (niente bandiera), scegli la squadra e avvii: i bot completano le squadre. Vince la prima squadra a ' + KILL_WIN + ' eliminazioni.'
+    : 'Nel visore piazzi Base BLU, Base ROSSA e Bandiera Centro, scegli la squadra e avvii: i bot completano le squadre. Vince chi arriva a 500 punti conquistando la bandiera.';
+  document.querySelectorAll('.chip[data-w]').forEach(c => c.classList.toggle('sel', (c.dataset.w === '1') === worldOn));
+  const st = schoolState === 'loading' ? 'Caricamento del mondo...' : schoolState === 'error' ? 'Mondo non caricato: controlla la connessione' :
+    worldOn ? 'Mondo pronto \u2713 Stick sinistro = cammini. Combatti solo dentro la palestra.' : '';
+  document.querySelectorAll('.world-status').forEach(e => { e.textContent = st; e.style.display = st ? '' : 'none'; });
+}
+
+// ============================================================================
+// MONDO ISTITUTO: la scuola 3D (da Blender) riempie il visore; si combatte solo nella palestra.
+// Origine (0,0) = centro della palestra. Area di combattimento = rettangolo sul pavimento.
+// ============================================================================
+let worldOn = false, schoolState = 'none';        // none | loading | ready | error
+const GYM = { x: 14.5, z: 11.2 };                 // meta' lato dell'area giocabile (m)
+const WORLD_SPEED = 2.6;                           // m/s con lo stick sinistro
+const inGym = (x, z) => !worldOn || (Math.abs(x) <= GYM.x && Math.abs(z) <= GYM.z);
+const schoolGroup = new THREE.Group(); schoolGroup.visible = false; scene.add(schoolGroup);
+const SKY = new THREE.Color(0x9ec9ff), DARKBG = new THREE.Color(0x070b16), worldFog = new THREE.Fog(0x9ec9ff, 90, 195);
+
+function loadSchool() {
+  if (schoolState === 'loading' || schoolState === 'ready') return;
+  schoolState = 'loading'; updateModeUi();
+  new THREE.GLTFLoader().load('models/istituto.glb', gltf => {
+    gltf.scene.traverse(o => {
+      if (!o.isMesh) return;
+      const m = o.material;   // materiali leggeri (Lambert) per il visore
+      o.material = new THREE.MeshLambertMaterial({
+        color: m.color ? m.color.clone() : 0xffffff, map: m.map || null, side: m.side,
+        transparent: m.transparent, opacity: m.opacity, alphaTest: m.alphaTest || 0,
+        vertexColors: !!(o.geometry.attributes && o.geometry.attributes.color), emissive: m.emissive ? m.emissive.clone() : 0x000000
+      });
+      if (m.emissive && m.emissiveIntensity) o.material.emissive.multiplyScalar(Math.min(1, m.emissiveIntensity));
+      o.matrixAutoUpdate = false; o.updateMatrix();
+    });
+    schoolGroup.add(gltf.scene);
+    schoolState = 'ready'; updateModeUi(); applyWorldVisual();
+  }, undefined, e => { console.warn('Mondo non caricato', e); schoolState = 'error'; updateModeUi(); });
+}
+function applyWorldVisual() {
+  const on = worldOn && inAR && schoolState === 'ready';
+  schoolGroup.visible = on;
+  scene.background = !inAR ? DARKBG : (on ? SKY : null);
+  scene.fog = on ? worldFog : null;
+}
+function setWorld(on, fromNet) {
+  on = !!on;
+  const changed = on !== worldOn;
+  worldOn = on;
+  if (on) loadSchool();
+  if (changed && !fromNet) clearAll(true);   // l'arena va ripiazzata dentro la palestra
+  updateModeUi();
+  applyWorldVisual();
+  refresh();
+  if (!fromNet && isHost && mpPeer) broadcastArena();
+}
+
+// ============================================================================
+// 7. ARMA: KALASHNIKOV (una mano, oppure due mani come i militari)
+// ============================================================================
+// Modello 3D "Kalashnikov" di Freppen (Sketchfab, licenza CC BY 4.0), ottimizzato e caricato da models/kalashnikov.glb
+// (1 sola mesh, 1 sola texture, gia' in metri, origine = impugnatura a pistola, canna verso -Z)
+const AK_DATA = { muzzle: [0, 0.0635, -0.5591], fore: [0, 0.0603, -0.2883] };
+let akModel = null;
+function loadRifleModel() {
+  if (!THREE.GLTFLoader) { console.warn('GLTFLoader non disponibile: uso il fucile di riserva'); return; }
+  new THREE.GLTFLoader().load('models/kalashnikov.glb', gltf => {
+    gltf.scene.traverse(o => {
+      if (o.isMesh) {
+        o.frustumCulled = false;
+        if (o.material && o.material.map) {
+          o.material.map.encoding = renderer.outputEncoding;   // stessa gestione colore del resto della scena
+          o.material.map.anisotropy = 4;
+          o.material.map.needsUpdate = true;
+          o.material.needsUpdate = true;
+        }
+      }
+    });
+    akModel = gltf.scene;
+    // sostituisco il fucile provvisorio con quello vero
+    const vis = rightBlaster.visible;
+    scene.remove(rightBlaster);
+    rightBlaster = createBlasterModel(myTeam);
+    rightBlaster.visible = vis;
+    scene.add(rightBlaster);
+    rifleReady = false;
+  }, undefined, err => console.warn('Caricamento fucile fallito:', err));
+}
+
+// Regolazioni (se sul visore l'arma sta troppo alta/bassa/avanti basta cambiare questi valori)
+const RIFLE_GRIP = new THREE.Vector3(0, -0.06, 0.05); // dove sta il palmo rispetto al puntatore del controller
+const RIFLE_INTERVAL = 0.13;                          // secondi tra due colpi tenendo premuto (~7 colpi al secondo)
+const RIFLE_GRAB_IN = 0.20;                           // distanza (m) dal paramano per "afferrare" con la sinistra
+const trigDown = [false, false];
+let rifleReady = false, twoHand = false, rifleKick = 0, fireCd = 0;
+
+function createBlasterModel(team) {
+  const g = new THREE.Group();
+  const rifle = new THREE.Group();
+  const accent = new THREE.MeshBasicMaterial({ color: team === 'red' ? 0xff3b3b : 0x2f8bff });
+  if (akModel) {
+    rifle.add(akModel.clone());
+  } else {
+    // fucile provvisorio (visibile solo finche' il modello non e' caricato)
+    const fb = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.08, 0.7), new THREE.MeshStandardMaterial({ color: 0x181e2b }));
+    fb.position.set(0, 0.04, -0.2);
+    rifle.add(fb);
+  }
+  const mz = AK_DATA.muzzle, fg = AK_DATA.fore;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.017, 0.004, 8, 16), accent);   // anello colore squadra sulla bocca
+  ring.position.set(mz[0], mz[1], mz[2] + 0.035);
+  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.004, 0.16), accent);     // striscia colore squadra sul paramano
+  strip.position.set(0, 0.106, -0.2);
+  const muzzleTip = new THREE.Object3D();
+  muzzleTip.position.set(mz[0], mz[1], mz[2]);
+  rifle.add(ring, strip, muzzleTip);
+  // pallino luminoso che indica dove appoggiare la mano sinistra
+  const hint = new THREE.Mesh(
+    new THREE.SphereGeometry(0.035, 12, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false })
+  );
+  hint.position.set(fg[0], fg[1], fg[2]);
+  hint.visible = false;
+  g.add(rifle, hint);
+  g.userData = { muzzle: muzzleTip, rifle, hint, team };
+  return g;
+}
+
+let leftBlaster = new THREE.Group();   // il fucile e' uno solo (mano destra); questo resta vuoto e nascosto
+let rightBlaster = createBlasterModel(myTeam);
+leftBlaster.visible = false;
+rightBlaster.visible = false;
+scene.add(leftBlaster);
+scene.add(rightBlaster);
+loadRifleModel();
+
+function updateBlasterColors() {
+  scene.remove(rightBlaster);
+  rightBlaster = createBlasterModel(myTeam);
+  rifleReady = false;
+  bindBlastersToControllers();
+  rightBlaster.visible = (gamePhase === 'play');
+}
+
+// Il fucile non e' piu' figlio del controller: la sua posa viene calcolata ogni frame da updateRifle()
+function bindBlastersToControllers() {
+  scene.add(leftBlaster);
+  scene.add(rightBlaster);
+}
+
+const _rP = new THREE.Vector3(), _rQ = new THREE.Quaternion(), _rS = new THREE.Vector3();
+const _hold = new THREE.Vector3(), _lP = new THREE.Vector3(), _fP = new THREE.Vector3(), _dd = new THREE.Vector3();
+const _ux = new THREE.Vector3(), _uy = new THREE.Vector3(), _uz = new THREE.Vector3(), _up = new THREE.Vector3();
+const _rM = new THREE.Matrix4(), _tQ = new THREE.Quaternion();
+const _mzP = new THREE.Vector3(), _mzD = new THREE.Vector3();
+const _qFore = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.atan2(AK_DATA.fore[1], -AK_DATA.fore[2]));
+
+// Fucile bloccato dai muri: ero dentro un muro, oppure occhi->impugnatura o impugnatura->bocca attraversano un muro
+function wallBlocksRifle(grip, muzzle) {
+  if (!walls.length) return false;
+  _wEye.copy(camera.position);
+  let t = playerInWall ? 0 : wallSegHit(_wEye, grip, _wHit);
+  if (t < 0) t = wallSegHit(grip, muzzle, _wHit);
+  if (t < 0) return false;
+  const now = performance.now();
+  if (now - wallFeedbackT > 350) {
+    wallFeedbackT = now;
+    audio.playWallHit();
+    const c = ctrls.find(k => k.userData.hand !== 'left');
+    if (c) buzz(c, 0.6, 40);
+    if (!playerInWall) spawnImpactSparks(_wHit.point, _wHit.normal, myTeam);
+  }
+  return true;
+}
+
+function fireRifle() {
+  const b = rightBlaster, m = AK_DATA.muzzle;
+  _mzP.set(m[0], m[1], m[2]).applyQuaternion(b.quaternion).add(b.position);
+  _mzD.set(0, 0, -1).applyQuaternion(b.quaternion);
+  if (wallBlocksRifle(b.position, _mzP)) return;   // muro: niente colpo
+  shootLaser(_mzP, _mzD, myTeam, false, true);
+  rifleKick = 1;
+  if (twoHand) {
+    const l = ctrls.find(c => c.userData.hand === 'left');
+    if (l) buzz(l, 0.35, 30);
+  }
+}
+
+// Posa del fucile: una mano = segue il controller destro; due mani = la canna punta dalla mano destra alla sinistra
+function updateRifle(dt) {
+  const rightCtrl = ctrls.find(c => c.userData.hand === 'right') || ctrls[0];
+  const leftCtrl = ctrls.find(c => c.userData.hand === 'left') || ctrls[1];
+  const b = rightBlaster, u = b.userData;
+  if (!rightCtrl || !b.visible) return;
+
+  rightCtrl.matrixWorld.decompose(_rP, _rQ, _rS);
+  _hold.copy(RIFLE_GRIP).applyMatrix4(rightCtrl.matrixWorld);          // palmo destro = impugnatura
+
+  const hasLeft = !!(leftCtrl && leftCtrl.visible && leftCtrl.userData.gp);
+  let dFore = 9, reach = 9;
+  if (hasLeft) {
+    _lP.copy(RIFLE_GRIP).applyMatrix4(leftCtrl.matrixWorld);           // palmo sinistro
+    _fP.set(AK_DATA.fore[0], AK_DATA.fore[1], AK_DATA.fore[2]).applyQuaternion(b.quaternion).add(b.position);
+    dFore = _lP.distanceTo(_fP);
+    reach = _lP.distanceTo(_hold);
+  }
+  // la sinistra "afferra" il paramano se ci si avvicina, e lascia se si allontana troppo
+  if (!twoHand && hasLeft && dFore < RIFLE_GRAB_IN) twoHand = true;
+  else if (twoHand && (!hasLeft || reach > 0.55 || reach < 0.12)) twoHand = false;
+
+  if (twoHand) {
+    _dd.copy(_lP).sub(_hold);
+    _uz.copy(_dd).normalize().negate();                                // +Z dell'arma = verso il tiratore
+    _uy.set(0, 1, 0).applyQuaternion(_rQ);
+    _up.set(0, 0.75, 0).addScaledVector(_uy, 0.25);                    // arma tenuta dritta, un po' guidata dal polso destro
+    _ux.crossVectors(_up, _uz);
+    if (_ux.lengthSq() < 1e-4) _ux.set(1, 0, 0).applyQuaternion(_rQ);
+    _ux.normalize();
+    _uy.crossVectors(_uz, _ux);
+    _rM.makeBasis(_ux, _uy, _uz);
+    _tQ.setFromRotationMatrix(_rM).multiply(_qFore);
+  } else {
+    _tQ.copy(_rQ);
+  }
+
+  if (!rifleReady) {
+    b.position.copy(_hold);
+    b.quaternion.copy(_tQ);
+    rifleReady = true;
+  } else {
+    b.position.copy(_hold);
+    b.quaternion.slerp(_tQ, 1 - Math.exp(-dt * (twoHand ? 30 : 45)));
+  }
+
+  // rinculo e indicatore del paramano
+  rifleKick = Math.max(0, rifleKick - dt * 9);
+  u.rifle.position.z = rifleKick * 0.025;
+  u.rifle.rotation.x = rifleKick * 0.04;
+  const near = hasLeft && !twoHand && dFore < 0.5;
+  u.hint.visible = near;
+  if (near) u.hint.material.opacity = 0.18 + 0.15 * Math.sin(performance.now() / 110);
+  b.updateMatrixWorld(true);
+
+  // fuoco automatico tenendo premuto il grilletto (destro o sinistro)
+  if (trigDown[0] || trigDown[1]) {
+    fireCd -= dt;
+    if (fireCd <= 0) {
+      fireRifle();
+      fireCd += RIFLE_INTERVAL;
+      if (fireCd < 0) fireCd = RIFLE_INTERVAL;
+    }
+  }
+}
+
+// ============================================================================
+// 8. POOL DI PROIETTILI & PARTICELLE (Zero Allocation Anti-Lag)
+// ============================================================================
+const LASER_POOL_SIZE = 100;
+const laserPool = [];
+const laserContainer = new THREE.Group();
+scene.add(laserContainer);
+
+const laserGeo = new THREE.CylinderGeometry(0.018, 0.018, 0.45, 8);
+laserGeo.rotateX(Math.PI / 2);
+const laserMatBlue = new THREE.MeshBasicMaterial({ color: 0x38b6ff });
+const laserMatRed = new THREE.MeshBasicMaterial({ color: 0xff3b3b });
+
+for (let i = 0; i < LASER_POOL_SIZE; i++) {
+  const mesh = new THREE.Mesh(laserGeo, laserMatBlue);
+  mesh.visible = false;
+  laserContainer.add(mesh);
+  laserPool.push({
+    mesh,
+    active: false,
+    dir: new THREE.Vector3(),
+    speed: 55,
+    life: 0,
+    team: 'blue',
+    travel: 0, wallDist: 1e9, hasHit: false,
+    hitP: new THREE.Vector3(), hitN: new THREE.Vector3()
+  });
+}
+
+const SPARK_POOL_SIZE = 120;
+const sparkPool = [];
+const sparkGeo = new THREE.SphereGeometry(0.012, 4, 4);
+const sparkMat = new THREE.MeshBasicMaterial({ color: 0xffb733 });
+for (let i = 0; i < SPARK_POOL_SIZE; i++) {
+  const mesh = new THREE.Mesh(sparkGeo, sparkMat);
+  mesh.visible = false;
+  scene.add(mesh);
+  sparkPool.push({ mesh, active: false, vel: new THREE.Vector3(), life: 0 });
+}
+
+function spawnImpactSparks(pos, normal, team) {
+  const count = 14;
+  let spawned = 0;
+  for (let i = 0; i < SPARK_POOL_SIZE && spawned < count; i++) {
+    const s = sparkPool[i];
+    if (!s.active) {
+      s.active = true;
+      s.mesh.visible = true;
+      s.mesh.position.copy(pos);
+      s.life = 0.35 + Math.random() * 0.2;
+      s.vel.copy(normal).multiplyScalar(1.5 + Math.random() * 3.0);
+      s.vel.x += (Math.random() - 0.5) * 3;
+      s.vel.y += (Math.random() - 0.5) * 3;
+      s.vel.z += (Math.random() - 0.5) * 3;
+      spawned++;
+    }
+  }
+}
+
+const flashGeo = new THREE.SphereGeometry(0.06, 8, 8);
+const flashMats = {
+  blue: new THREE.MeshBasicMaterial({ color: 0x77c2ff, transparent: true, opacity: 0.95 }),
+  red: new THREE.MeshBasicMaterial({ color: 0xff5555, transparent: true, opacity: 0.95 })
+};
+function triggerMuzzleFlash(origin, team) {
+  const flash = new THREE.Mesh(flashGeo, team === 'red' ? flashMats.red : flashMats.blue);
+  flash.position.copy(origin);
+  scene.add(flash);
+  setTimeout(() => { scene.remove(flash); }, 45);
+}
+
+function shootLaser(origin, direction, team, isLeft = false, isLocal = true, vol = 1) {
+  audio.playShoot(team, isLeft, vol);
+  triggerMuzzleFlash(origin, team);
+  let slot = null;
+
+  for (let i = 0; i < LASER_POOL_SIZE; i++) {
+    const l = laserPool[i];
+    if (!l.active) {
+      l.active = true;
+      l.mesh.visible = true;
+      l.team = team;
+      l.mesh.material = team === 'red' ? laserMatRed : laserMatBlue;
+      l.mesh.position.copy(origin);
+      l.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), direction);
+      l.dir.copy(direction).normalize();
+      l.life = 1.0;
+      l.remote = !isLocal; l.bot = null; l.travel = 0; l.wallDist = 1e9; l.hasHit = false;
+      slot = l;
+      break;
+    }
+  }
+
+  if (isLocal && inAR) {
+    const ctrl = ctrls.find(c => isLeft ? (c.userData.hand === 'left') : (c.userData.hand !== 'left'));
+    if (ctrl) buzz(ctrl, 0.85, 55);
+  }
+
+  // Il colpo non attraversa MAI i muri: calcolo il punto d'impatto sull'intero percorso (55 m = velocita' x vita)
+  if (slot && walls.length > 0) {
+    const range = slot.speed * 1.0;
+    _wEnd.copy(direction).normalize().multiplyScalar(range).add(origin);
+    const t = wallSegHit(origin, _wEnd, _wHit);
+    if (t >= 0) {
+      slot.hasHit = true;
+      slot.wallDist = t * range;
+      slot.hitP.copy(_wHit.point);
+      slot.hitN.copy(_wHit.normal);
+    }
+  }
+
+  if (isLocal && mpPeer) {
+    broadcast({
+      type: 'shoot',
+      origin: [origin.x, origin.y, origin.z],
+      dir: [direction.x, direction.y, direction.z],
+      team,
+      isLeft
+    });
+  }
+  return slot;
+}
+
+// ============================================================================
+// 9. ELEMENTI 3D OLOGRAFICI VISIBILI IN VR (Menu Polso, Guida AR, Terminale Team)
+// ============================================================================
+const ACC = { wall: '#9aa8e8', wall2: '#ffd84d', blue: '#2f8bff', red: '#ff4d4d', flag: '#ffd84d' };
+const SUB = {
+  wall: () => { const n = walls.filter(o => o.userData.kind === 'wall').length; return n ? n + ' piazzati' : 'Nessuno'; },
+  wall2: () => { const n = walls.filter(o => o.userData.kind === 'wall2').length; return n ? n + ' piazzati' : 'Nessuno'; },
+  blue: () => single.blue ? '✓ Piazzata' : 'Da piazzare',
+  red: () => single.red ? '✓ Piazzata' : 'Da piazzare',
+  flag: () => single.flag ? '✓ Piazzata' : 'Da piazzare'
+};
+const PW = 576, PH = 1178;
+
+// IN FASE 1: IL MENU È APERTO DI DEFAULT! (menuOpen = true, menuT = 1.0)
+let menuOpen = true, menuT = 1.0, hoverObj = null, clearAsk = 0;
+const menu = new THREE.Group();
+menu.position.set(0, 0.09, -0.03);
+menu.rotation.x = -0.75;
+
+const ease = x => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
+const back = x => { x = Math.min(1, Math.max(0, x)); const c = 1.4; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); };
+function rr(x, px, py, w, h, r) { x.beginPath(); x.moveTo(px + r, py); x.arcTo(px + w, py, px + w, py + h, r); x.arcTo(px + w, py + h, px, py + h, r); x.arcTo(px, py + h, px, py, r); x.arcTo(px, py, px + w, py, r); x.closePath(); }
+
+function mk(w, h, cw, ch, id, px, py, pz, add) {
+  const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+  const tex = new THREE.CanvasTexture(c);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, blending: add ? THREE.AdditiveBlending : THREE.NormalBlending }));
+  m.position.set(px, py, pz);
+  m.userData = { id, cv: c, tex, ctx: c.getContext('2d'), s: 1, i: 0, l: 0, z: pz };
+  return m;
+}
+
+const toggle = mk(0.07, 0.07, 192, 192, 'toggle', 0, 0, 0);
+const panelG = new THREE.Group(); panelG.position.y = 0.05;
+const panelIn = new THREE.Group(); panelIn.position.y = 0.225; panelG.add(panelIn);
+const halo = mk(0.36, 0.62, 256, 256, 'halo', 0, 0, -0.006, true); panelIn.add(halo);
+{
+  const x = halo.userData.ctx, g = x.createRadialGradient(128, 128, 10, 128, 128, 128);
+  g.addColorStop(0, 'rgba(70,120,255,.5)'); g.addColorStop(1, 'rgba(70,120,255,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 256, 256); halo.userData.tex.needsUpdate = true;
+}
+const panel = mk(0.22, 0.45, PW, PH, 'panel', 0, 0, 0); panelIn.add(panel);
+
+const CP = [[-0.05, 0.113], [0.05, 0.113], [-0.05, 0.013], [0.05, 0.013], [0, -0.087]];
+const cards = TOOLS.map((id, i) => {
+  const m = mk(0.092, 0.092, 320, 320, id, CP[i][0], CP[i][1], 0.003); m.userData.i = i;
+  const mini = makeObj(id, false);
+  m.userData.ms = id === 'wall2' ? 0.018 : id === 'wall' ? 0.022 : 0.026;
+  mini.scale.setScalar(m.userData.ms);
+  mini.position.set(0, -0.022, 0.014);
+  m.add(mini);
+  m.userData.mini = mini;
+  panelIn.add(m);
+  return m;
+});
+
+const pills = [
+  ['undo', -0.05, -0.162, 0.092, 0.028, 320, 97],
+  ['clear', 0.05, -0.162, 0.092, 0.028, 320, 97],
+  ['confirm', 0, -0.2, 0.19, 0.03, 640, 101]
+].map(([id, px, py, w, h, cw, ch], k) => {
+  const m = mk(w, h, cw, ch, id, px, py, 0.003);
+  m.userData.i = 5 + k;
+  panelIn.add(m);
+  return m;
+});
+menu.add(toggle, panelG);
+
+// 3D Holographic Team Selection Terminal (Visibile in AR per la Fase 2)
+const teamTerminal = new THREE.Group();
+teamTerminal.position.set(0, 1.4, -1.8);
+scene.add(teamTerminal);
+teamTerminal.visible = false;
+
+const teamBlueCard = mk(0.48, 0.62, 512, 660, 'vr_pick_blue', -0.32, 0, 0);
+const teamRedCard  = mk(0.48, 0.62, 512, 660, 'vr_pick_red', 0.32, 0, 0);
+const teamStartBtn = mk(0.65, 0.15, 680, 160, 'vr_start_game', 0, -0.44, 0);
+teamTerminal.add(teamBlueCard, teamRedCard, teamStartBtn);
+teamTerminal.scale.setScalar(0.7);
+
+// Conto alla rovescia 3D (nel visore il DOM non si vede): resta davanti agli occhi
+const cdMesh = mk(0.5, 0.5, 512, 512, 'countdown', 0, 0, 0);
+cdMesh.visible = false;
+cdMesh.renderOrder = 10;
+cdMesh.userData.pop = 0;
+scene.add(cdMesh);
+function drawCountdown(text) {
+  const x = cdMesh.userData.ctx;
+  x.clearRect(0, 0, 512, 512);
+  const g = x.createRadialGradient(256, 256, 20, 256, 256, 256);
+  const col = { 3: '#ff3b3b', 2: '#ffd84d', 1: '#3bff7a' }[text] || '#2f8bff';
+  g.addColorStop(0, col);
+  g.addColorStop(1, col + '00');
+  x.globalAlpha = 0.5;
+  x.fillStyle = g;
+  x.fillRect(0, 0, 512, 512);
+  x.globalAlpha = 1;
+  x.textAlign = 'center';
+  x.textBaseline = 'middle';
+  x.font = '900 ' + (String(text).length <= 1 ? 320 : 200) + 'px system-ui, sans-serif';
+  x.shadowColor = col;
+  x.shadowBlur = 40;
+  x.fillStyle = '#ffffff';
+  x.fillText(String(text), 256, 262);
+  x.shadowBlur = 0;
+  cdMesh.userData.tex.needsUpdate = true;
+  cdMesh.userData.pop = 1;
+}
+const _cdFwd = new THREE.Vector3();
+function updateCountdownMesh(dt) {
+  if (!cdMesh.visible) return;
+  _cdFwd.set(0, 0, -1).applyQuaternion(camera.quaternion);
+  cdMesh.position.copy(camera.position).addScaledVector(_cdFwd, 1.0);
+  cdMesh.quaternion.copy(camera.quaternion);
+  cdMesh.userData.pop = Math.max(0, cdMesh.userData.pop - dt * 3);
+  cdMesh.scale.setScalar(1 + 0.4 * cdMesh.userData.pop);
+}
+
+function updateVrTeamCards() {
+  // Disegna Card Blu
+  {
+    const x = teamBlueCard.userData.ctx, isSel = (myTeam === 'blue');
+    x.clearRect(0, 0, 512, 660);
+    rr(x, 10, 10, 492, 640, 40);
+    x.fillStyle = isSel ? 'rgba(30, 80, 180, 0.95)' : 'rgba(15, 25, 55, 0.9)';
+    x.fill();
+    x.lineWidth = isSel ? 8 : 4;
+    x.strokeStyle = isSel ? '#4da3ff' : 'rgba(77, 163, 255, 0.4)';
+    x.stroke();
+
+    x.textAlign = 'center';
+    x.fillStyle = '#fff';
+    x.font = 'bold 44px system-ui,sans-serif';
+    x.fillText('SQUADRA BLU', 256, 90);
+    x.font = '60px system-ui,sans-serif';
+    x.fillText('🔵', 256, 210);
+    x.font = 'bold 28px system-ui,sans-serif';
+    x.fillStyle = '#c9d2f0';
+    x.fillText('Doppio Blaster Laser', 256, 320);
+    x.fillText(teamCount('blue') + ' / ' + TEAM_MAX + ' giocatori', 256, 370);
+
+    if (isSel) {
+      rr(x, 80, 460, 352, 70, 35);
+      x.fillStyle = '#4da3ff';
+      x.fill();
+      x.fillStyle = '#0b1020';
+      x.font = 'bold 30px system-ui,sans-serif';
+      x.fillText('SELEZIONATA', 256, 506);
+    }
+    teamBlueCard.userData.tex.needsUpdate = true;
+  }
+
+  // Disegna Card Rossa
+  {
+    const x = teamRedCard.userData.ctx, isSel = (myTeam === 'red');
+    x.clearRect(0, 0, 512, 660);
+    rr(x, 10, 10, 492, 640, 40);
+    x.fillStyle = isSel ? 'rgba(180, 30, 30, 0.95)' : 'rgba(55, 15, 15, 0.9)';
+    x.fill();
+    x.lineWidth = isSel ? 8 : 4;
+    x.strokeStyle = isSel ? '#ff5a5a' : 'rgba(255, 90, 90, 0.4)';
+    x.stroke();
+
+    x.textAlign = 'center';
+    x.fillStyle = '#fff';
+    x.font = 'bold 44px system-ui,sans-serif';
+    x.fillText('SQUADRA ROSSA', 256, 90);
+    x.font = '60px system-ui,sans-serif';
+    x.fillText('🔴', 256, 210);
+    x.font = 'bold 28px system-ui,sans-serif';
+    x.fillStyle = '#c9d2f0';
+    x.fillText('Doppio Blaster Laser', 256, 320);
+    x.fillText(teamCount('red') + ' / ' + TEAM_MAX + ' giocatori', 256, 370);
+
+    if (isSel) {
+      rr(x, 80, 460, 352, 70, 35);
+      x.fillStyle = '#ff5a5a';
+      x.fill();
+      x.fillStyle = '#0b1020';
+      x.font = 'bold 30px system-ui,sans-serif';
+      x.fillText('SELEZIONATA', 256, 506);
+    }
+    teamRedCard.userData.tex.needsUpdate = true;
+  }
+
+  // Disegna Pulsante Start
+  {
+    const x = teamStartBtn.userData.ctx;
+    x.clearRect(0, 0, 680, 160);
+    rr(x, 10, 10, 660, 140, 70);
+    const g = x.createLinearGradient(0, 0, 680, 0);
+    g.addColorStop(0, '#16b36a'); g.addColorStop(1, '#2ee59d');
+    x.fillStyle = g;
+    x.fill();
+    x.lineWidth = 4;
+    x.strokeStyle = '#fff';
+    x.stroke();
+
+    x.textAlign = 'center';
+    x.fillStyle = '#fff';
+    x.font = 'bold 48px system-ui,sans-serif';
+    x.fillText('⚔️ AVVIA PARTITA', 340, 95);
+    teamStartBtn.userData.tex.needsUpdate = true;
+  }
+}
+
+function drawCard(m) {
+  const { id, ctx: x, tex } = m.userData, sel = id === tool, hov = hoverObj === m, c = ACC[id];
+  x.clearRect(0, 0, 320, 320);
+  rr(x, 8, 8, 304, 304, 46); x.save(); x.clip();
+  const g = x.createLinearGradient(0, 0, 0, 320);
+  g.addColorStop(0, sel ? 'rgba(52,72,132,.98)' : hov ? 'rgba(46,58,104,.97)' : 'rgba(34,42,76,.95)');
+  g.addColorStop(1, 'rgba(12,17,36,.97)');
+  x.fillStyle = g; x.fillRect(0, 0, 320, 320);
+
+  const rg = x.createRadialGradient(160, 150, 6, 160, 150, 170);
+  rg.addColorStop(0, c + (sel ? '88' : hov ? '55' : '2a')); rg.addColorStop(1, c + '00');
+  x.fillStyle = rg; x.fillRect(0, 0, 320, 320);
+
+  x.save(); x.translate(160, 224); x.scale(1, 0.3);
+  const pg = x.createRadialGradient(0, 0, 4, 0, 0, 105);
+  pg.addColorStop(0, c + (sel ? 'cc' : '77')); pg.addColorStop(1, c + '00');
+  x.fillStyle = pg; x.beginPath(); x.arc(0, 0, 105, 0, 7); x.fill(); x.restore();
+  x.restore();
+
+  rr(x, 8, 8, 304, 304, 46);
+  x.lineWidth = sel ? 10 : hov ? 6 : 3;
+  x.strokeStyle = sel ? c : hov ? 'rgba(255,255,255,.55)' : 'rgba(255,255,255,.14)';
+  x.stroke();
+
+  x.textAlign = 'center'; x.textBaseline = 'alphabetic';
+  x.fillStyle = '#fff'; x.font = 'bold 34px system-ui,sans-serif';
+  x.fillText(NAMES[id], 160, 268);
+  x.fillStyle = sel ? c : 'rgba(255,255,255,.65)';
+  x.font = '600 22px system-ui,sans-serif';
+  x.fillText(SUB[id](), 160, 298);
+
+  if (sel) {
+    x.beginPath(); x.arc(268, 56, 26, 0, 7); x.fillStyle = c; x.fill();
+    x.strokeStyle = '#0b1020'; x.lineWidth = 8; x.lineCap = 'round'; x.lineJoin = 'round';
+    x.beginPath(); x.moveTo(256, 57); x.lineTo(265, 66); x.lineTo(281, 46); x.stroke();
+  }
+  tex.needsUpdate = true;
+}
+
+function drawPill(m) {
+  const { id, ctx: x, tex, cv: c } = m.userData, W = c.width, H = c.height, hov = hoverObj === m;
+  const ask = id === 'clear' && clearAsk > performance.now(), ok = id !== 'confirm' || arenaIsReady();
+  x.clearRect(0, 0, W, H);
+  rr(x, 5, 5, W - 10, H - 10, (H - 10) / 2);
+  if (id === 'confirm' && ok) {
+    const g = x.createLinearGradient(0, 0, W, 0);
+    g.addColorStop(0, '#16b36a'); g.addColorStop(1, '#2ee59d');
+    x.fillStyle = g;
+  } else {
+    x.fillStyle = id === 'confirm' ? 'rgba(52,60,88,.92)' : ask ? '#d63a3a' : hov ? 'rgba(50,62,108,.97)' : 'rgba(30,38,70,.96)';
+  }
+  x.fill();
+  x.lineWidth = hov ? 5 : 3;
+  x.strokeStyle = hov ? 'rgba(255,255,255,.6)' : 'rgba(255,255,255,.16)';
+  x.stroke();
+
+  x.fillStyle = ok ? '#fff' : '#8c96b8';
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = 'bold ' + Math.round(H * 0.4) + 'px system-ui,sans-serif';
+  x.fillText(
+    id === 'undo' ? '↶ Annulla' :
+    id === 'clear' ? (ask ? 'Sicuro?' : '🗑 Svuota') :
+    ok ? '✓ CONFERMA ARENA' : gameMode === 'dm' ? 'Piazza le due basi' : 'Piazza basi e bandiera',
+    W / 2, H / 2 + 2
+  );
+  tex.needsUpdate = true;
+}
+
+function drawPanel() {
+  const x = panel.userData.ctx; x.clearRect(0, 0, PW, PH);
+  const g = x.createLinearGradient(0, 0, 0, PH);
+  g.addColorStop(0, 'rgba(20,28,58,.94)'); g.addColorStop(1, 'rgba(6,10,24,.96)');
+  rr(x, 6, 6, PW - 12, PH - 12, 60); x.fillStyle = g; x.fill();
+
+  const bg = x.createLinearGradient(0, 0, PW, PH);
+  bg.addColorStop(0, 'rgba(90,170,255,.7)'); bg.addColorStop(1, 'rgba(140,90,255,.5)');
+  rr(x, 6, 6, PW - 12, PH - 12, 60); x.lineWidth = 4; x.strokeStyle = bg; x.stroke();
+
+  x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = '#fff';
+  x.font = 'bold 38px system-ui,sans-serif';
+  x.fillText('SET ARENA (FASE 1)', PW / 2, 60);
+
+  x.font = 'bold 20px system-ui,sans-serif';
+  const chips = [
+    ['#4da3ff', single.blue, 'BLU', 130],
+    ...(gameMode === 'flag' ? [['#ffd84d', single.flag, 'BANDIERA', 200]] : []),
+    ['#ff5a5a', single.red, 'ROSSA', 150]
+  ];
+  let cx = (PW - (chips.reduce((a, c) => a + c[3], 0) + 14 * (chips.length - 1))) / 2;
+  chips.forEach(([c, on, l, w]) => {
+    rr(x, cx, 102, w, 40, 20); x.fillStyle = on ? c + '33' : 'rgba(255,255,255,.05)'; x.fill();
+    x.lineWidth = 2.5; x.strokeStyle = on ? c : 'rgba(255,255,255,.18)'; x.stroke();
+    x.beginPath(); x.arc(cx + 20, 122, 6, 0, 7);
+    if (on) { x.fillStyle = c; x.fill(); } else { x.lineWidth = 2.5; x.strokeStyle = c; x.stroke(); }
+    x.fillStyle = on ? '#fff' : 'rgba(255,255,255,.6)'; x.textAlign = 'left';
+    x.fillText(l, cx + 34, 123);
+    cx += w + 14;
+  });
+  panel.userData.tex.needsUpdate = true;
+}
+
+function drawToggle() {
+  const x = toggle.userData.ctx; x.clearRect(0, 0, 192, 192);
+  const g = x.createLinearGradient(0, 30, 0, 162);
+  g.addColorStop(0, '#4aa3ff'); g.addColorStop(1, '#5a4cff');
+  x.beginPath(); x.arc(96, 96, 64, 0, 7); x.fillStyle = g; x.fill();
+
+  x.beginPath(); x.arc(96, 96, 64, 0, 7);
+  x.lineWidth = 4; x.strokeStyle = 'rgba(255,255,255,.5)'; x.stroke();
+  x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  if (menuOpen) {
+    x.strokeStyle = '#fff'; x.lineWidth = 10; x.lineCap = 'round';
+    x.beginPath(); x.moveTo(74, 74); x.lineTo(118, 118); x.moveTo(118, 74); x.lineTo(74, 118); x.stroke();
+  } else {
+    [[68, 68], [102, 68], [68, 102], [102, 102]].forEach(([px, py]) => { rr(x, px, py, 24, 24, 7); x.fill(); });
+  }
+  toggle.userData.tex.needsUpdate = true;
+}
+
+const drawTile = m => { const id = m.userData.id; if (id === 'toggle') drawToggle(); else if (TOOLS.includes(id)) drawCard(m); else drawPill(m); };
+function drawMenu() { drawPanel(); cards.forEach(drawCard); pills.forEach(drawPill); drawToggle(); updateVrTeamCards(); }
+
+function updateMenu(dt, t) {
+  if (gamePhase !== 'setup') return;
+  menuT = Math.min(1, Math.max(0, menuT + (menuOpen ? 1 : -1) * dt * 3.5));
+  const e = ease(menuT);
+  panelG.visible = menuT > 0.01;
+  panelG.scale.setScalar(0.45 + 0.55 * back(menuT));
+  panel.material.opacity = e; halo.material.opacity = e;
+  panelIn.position.y = 0.225 + Math.sin(t * 1.6) * 0.0015 * e;
+
+  [...cards, ...pills].forEach(m => {
+    const d = m.userData, p = ease(menuT * 1.7 - d.i * 0.1), pb = back(menuT * 1.7 - d.i * 0.1);
+    d.s += ((hoverObj === m ? 1.07 : 1) - d.s) * Math.min(1, dt * 18);
+    m.scale.setScalar(Math.max(0.001, pb * d.s));
+    m.visible = p > 0.01 && !(d.id === 'flag' && gameMode !== 'flag');
+    m.material.opacity = p;
+    if (d.mini) {
+      d.l += ((d.id === tool ? 1 : 0) - d.l) * Math.min(1, dt * 12);
+      m.position.z = d.z + 0.005 * d.l;
+      d.mini.rotation.y = t * (1.2 + 1.2 * d.l);
+      d.mini.scale.setScalar(d.ms * (1 + 0.12 * d.l));
+    }
+  });
+}
+
+function setTool(t) {
+  if (gamePhase !== 'setup') return;
+  if (t === 'flag' && gameMode !== 'flag') return;
+  tool = t;
+  cards.forEach(drawCard);
+}
+
+function actTile(id) {
+  if (id === 'toggle') { menuOpen = !menuOpen; drawToggle(); return; }
+  if (TOOLS.includes(id)) return setTool(id);
+  if (id === 'undo') return undo();
+  if (id === 'confirm') return goToTeamSelect();
+  if (id === 'vr_pick_blue') { selectTeam('blue'); return; }
+  if (id === 'vr_pick_red')  { selectTeam('red'); return; }
+  if (id === 'vr_start_game') { confirmTeamAndStart(); return; }
+  if (clearAsk > performance.now()) { clearAsk = 0; clearAll(); } else clearAsk = performance.now() + 2500;
+  drawMenu();
+}
+
+function buzz(c, s, ms) {
+  try {
+    const gp = c.userData.gp, a = gp && gp.hapticActuators && gp.hapticActuators[0];
+    if (a && a.pulse) a.pulse(s, ms);
+    else if (gp && gp.vibrationActuator) gp.vibrationActuator.playEffect('dual-rumble', { duration: ms, strongMagnitude: s, weakMagnitude: s });
+  } catch (e) {}
+}
+
+function makeGhost() {
+  const g = new THREE.Group(), set = {};
+  TOOLS.forEach(t => { set[t] = makeObj(t, true); g.add(set[t]); });
+  g.visible = false;
+  ghostRoot.add(g);
+  return { g, set };
+}
+const ghosts = [makeGhost(), makeGhost()];
+function showGhost(gh, p) {
+  gh.g.visible = true;
+  gh.g.position.set(p.x, 0, p.z);
+  gh.g.rotation.y = ang;
+  TOOLS.forEach(t => gh.set[t].visible = (t === tool));
+}
+
+// ============================================================================
+// 10. GESTIONE CONTROLLER VR (Mano Destra & Sinistra Bulletproof)
+// ============================================================================
+const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const ray = new THREE.Ray(), hit = new THREE.Vector3();
+const rot = new THREE.Matrix4(), rc = new THREE.Raycaster();
+
+function ctrlRay(c) {
+  rot.identity().extractRotation(c.matrixWorld);
+  ray.origin.setFromMatrixPosition(c.matrixWorld);
+  ray.direction.set(0, 0, -1).applyMatrix4(rot);
+}
+
+const ctrls = [0, 1].map(i => {
+  const c = renderer.xr.getController(i);
+  c.userData = { id: i, gp: null, prev: {}, hand: i === 0 ? 'right' : 'left', hover: null };
+  const line = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -4)]),
+    new THREE.LineBasicMaterial({ color: 0x66ff99 })
+  );
+  c.userData.line = line;
+  c.add(line);
+
+  c.addEventListener('connected', e => {
+    c.userData.gp = e.data.gamepad || null;
+    if (e.data.handedness && e.data.handedness !== 'none') {
+      c.userData.hand = e.data.handedness;
+    }
+    updateControllerAttachments();
+    updatePhaseUI();
+  });
+
+  // Grilletto premuto
+  c.addEventListener('selectstart', () => {
+    const u = c.userData;
+    const isLeft = (u.hand === 'left');
+
+    if (gamePhase === 'setup') {
+      // Il controller SINISTRO porta solo il menu: non piazza nulla
+      if (isLeft) return;
+      // Se si clicca un elemento del menu
+      if (u.hover) {
+        buzz(c, 0.7, 45);
+        return actTile(u.hover.userData.id);
+      }
+      // Se si punta a terra con il controller e il ghost è visibile: piazza l'oggetto!
+      if (tool && ghosts[i].g.visible) {
+        const p = ghosts[i].g.position;
+        place(tool, p.x, p.z, ang);
+        buzz(c, 0.5, 30);
+      }
+    } else if (gamePhase === 'team_select') {
+      // In selezione team VR, clicca card o tasto start
+      if (u.hover) {
+        buzz(c, 0.7, 45);
+        return actTile(u.hover.userData.id);
+      }
+    } else if (gamePhase === 'play') {
+      // IN PARTITA: spara col fucile (tenendo premuto = fuoco automatico)
+      trigDown[i] = true;
+      fireCd = RIFLE_INTERVAL;
+      fireRifle();
+    }
+  });
+  c.addEventListener('selectend', () => { trigDown[i] = false; });
+
+  // Grip / squeeze per cancellare l'oggetto più vicino in setup
+  c.addEventListener('squeezestart', () => {
+    if (gamePhase !== 'setup' || c.userData.hand === 'left') return;
+    ctrlRay(c);
+    if (ray.intersectPlane(plane, hit)) removeNearest(hit.x, hit.z);
+  });
+
+  scene.add(c);
+  return c;
+});
+
+function updateControllerAttachments() {
+  const leftCtrl = ctrls.find(c => c.userData.hand === 'left') || ctrls[1];
+  const rightCtrl = ctrls.find(c => c.userData.hand === 'right') || ctrls[0];
+
+  if (leftCtrl && menu.parent !== leftCtrl) {
+    if (menu.parent) menu.parent.remove(menu);
+    leftCtrl.add(menu);
+    menu.position.set(0, 0.09, -0.03);
+    menu.rotation.x = -0.75;
+  }
+  bindBlastersToControllers();
+}
+
+let lastTime = performance.now();
+function updateAR() {
+  const now = performance.now(), dt = Math.min(0.08, (now - lastTime) / 1000);
+  lastTime = now;
+
+  if (gamePhase === 'setup') {
+    updateMenu(dt, now / 1000);
+  }
+  if (gamePhase === 'team_select') placeTeamTerminal(false, dt);
+  scene.updateMatrixWorld();
+
+  const prevHover = hoverObj;
+  hoverObj = null;
+
+  // Oggetti cliccabili via raycast
+  let hot = [];
+  if (gamePhase === 'setup') {
+    hot = menuOpen ? [toggle, ...cards.filter(c => !(c.userData.id === 'flag' && gameMode !== 'flag')), ...pills] : [toggle];
+  } else if (gamePhase === 'team_select') {
+    hot = [teamBlueCard, teamRedCard, teamStartBtn];
+  }
+
+  ctrls.forEach((c, i) => {
+    const u = c.userData;
+    const isLeft = (u.hand === 'left');
+    const isSetup = (gamePhase === 'setup');
+    const isTeamSelect = (gamePhase === 'team_select');
+
+    // In setup solo il controller DESTRO ha il raggio (piazza e clicca il menu); in selezione team vanno bene entrambi
+    const pointing = (isSetup && !isLeft) || isTeamSelect;
+    u.line.visible = pointing;
+    u.hover = null;
+
+    if (pointing) {
+      ctrlRay(c);
+      rc.ray.copy(ray);
+      const h = rc.intersectObjects(hot, false)[0];
+      if (h) {
+        u.hover = hoverObj = h.object;
+        u.line.scale.z = h.distance / 4;
+        ghosts[i].g.visible = false;
+      } else {
+        u.line.scale.z = 1;
+        // Se siamo in setup e il raggio punta a terra, mostra il ghost dell'oggetto da piazzare
+        if (isSetup && tool && ray.intersectPlane(plane, hit) && inGym(hit.x, hit.z)) {
+          showGhost(ghosts[i], hit);
+        } else {
+          ghosts[i].g.visible = false;
+        }
+      }
+    } else {
+      ghosts[i].g.visible = false;
+    }
+
+    const gp = u.gp;
+    if (!gp) return;
+    const ax = gp.axes[2] || 0;
+    if (isSetup && !isLeft && Math.abs(ax) > 0.2) ang -= ax * dt * 2.5;
+
+    const edge = (k, f) => {
+      const d = !!(gp.buttons[k] && gp.buttons[k].pressed);
+      if (d && !u.prev[k]) f();
+      u.prev[k] = d;
+    };
+    // Click stick SINISTRO = raddrizza l'arena secondo dove guardi (sempre); stick DESTRO = procedi (in setup)
+    edge(3, () => { if (isLeft) recenterArena(); else if (isSetup && arenaIsReady()) goToTeamSelect(); });
+    if (isSetup) {
+      edge(4, () => { menuOpen = !menuOpen; drawToggle(); }); // Tasto X o A per aprire/chiudere menu
+      edge(5, () => { undo(); });                              // Tasto Y o B per annullare
+    }
+  });
+
+  if (prevHover !== hoverObj) {
+    if (gamePhase === 'setup') {
+      [prevHover, hoverObj].forEach(o => o && drawTile(o));
+    }
+    if (hoverObj) {
+      const rc2 = ctrls.find(c => c.userData.hand !== 'left');
+      if (rc2) buzz(rc2, 0.25, 15);
+    }
+  }
+}
+
+// ============================================================================
+// 12. GESTIONE TRANSIZIONI TRA LE FASI
+// ============================================================================
+function updatePhaseUI() {
+  if (gamePhase === 'setup') {
+    menu.visible = true;
+    menuOpen = true;
+    teamTerminal.visible = false;
+    leftBlaster.visible = false;
+    rightBlaster.visible = false;
+  } else if (gamePhase === 'team_select') {
+    menu.visible = false;
+    teamTerminal.visible = true;
+    leftBlaster.visible = false;
+    rightBlaster.visible = false;
+    updateVrTeamCards();
+  } else if (gamePhase === 'countdown') {
+    menu.visible = false;
+    teamTerminal.visible = false;
+    leftBlaster.visible = false;
+    rightBlaster.visible = false;
+  } else if (gamePhase === 'play') {
+    menu.visible = false;
+    teamTerminal.visible = false;
+    leftBlaster.visible = false;
+    rightBlaster.visible = true;
+  }
+}
+
+// Terminale di scelta squadra: a 0.8 m davanti al giocatore e segue la direzione dello sguardo
+const _tmFwd = new THREE.Vector3();
+const _tmDir = new THREE.Vector3(0, 0, -1);
+const _tmPos = new THREE.Vector3();
+const TEAM_DIST = 0.8;
+function placeTeamTerminal(instant, dt) {
+  _tmFwd.set(0, 0, -1).applyQuaternion(camera.quaternion);
+  _tmFwd.y = 0;
+  // se guardo troppo su o giu non cambio direzione
+  if (_tmFwd.lengthSq() > 0.04) {
+    _tmFwd.normalize();
+    if (instant) _tmDir.copy(_tmFwd);
+    else _tmDir.lerp(_tmFwd, 1 - Math.exp(-5 * dt)).normalize();
+  }
+  const p = camera.position;
+  _tmPos.set(p.x + _tmDir.x * TEAM_DIST, p.y - 0.12, p.z + _tmDir.z * TEAM_DIST);
+  if (instant) teamTerminal.position.copy(_tmPos);
+  else teamTerminal.position.lerp(_tmPos, 1 - Math.exp(-8 * dt));
+  teamTerminal.rotation.set(0, Math.atan2(-_tmDir.x, -_tmDir.z), 0);
+  teamTerminal.updateMatrixWorld(true);
+}
+
+function goToTeamSelect() {
+  if (!arenaIsReady()) {
+    showBanner(gameMode === 'dm' ? 'Piazza prima Base BLU e Base ROSSA!' : 'Piazza prima Base BLU, Base ROSSA e Bandiera Centro!');
+    return;
+  }
+  gamePhase = 'team_select';
+  tool = null;
+  ghosts.forEach(x => x.g.visible = false);
+  placeTeamTerminal(true, 0);
+  updatePhaseUI();
+}
+
+function selectTeam(team) {
+  if (mpPeer && isHost) { pickTeam(mpPeer.id, team); return; }
+  if (mpPeer && mpConns.length) { mpConns[0].send({ type: 'team_pick', team }); return; }
+  myTeam = team;
+  updateVrTeamCards();
+  updateBlasterColors();
+}
+
+function confirmTeamAndStart() {
+  if (!mpPeer || (!isHost && !mpConns.length)) { startMatchCountdown(); return; }   // partita da soli
+  if (!isHost) { say("Solo l'host può avviare la partita", '#ffd84d', 2.5); return; }
+  if (mpConns.length && (teamCount('blue') < 1 || teamCount('red') < 1)) { say('Serve almeno 1 giocatore per squadra', '#ff6b6b', 3); return; }
+  startMatchCountdown();
+  broadcast({ type: 'team_start' });
+}
+
+// ============================================================================
+// HUD 3D (messaggi, cintura HP/punti, vignetta danno), effetti, HP e vittoria
+// ============================================================================
+const WIN_SCORE = 500, RESPAWN_S = 5, HIT_DMG = 10;
+let dead = false, respawnT = 0, invuln = 0, hurtFlash = 0, hudT = 0;
+const fx = [];
+const _hv = new THREE.Vector3(), _bf = new THREE.Vector3(), beltDir = new THREE.Vector3(0, 0, -1);
+
+const hudMsg = mk(0.9, 0.225, 1024, 256, 'hudmsg', 0, 0, 0);
+hudMsg.visible = false; hudMsg.renderOrder = 11; hudMsg.material.depthTest = false; scene.add(hudMsg);
+function say(text, color, secs) {
+  const x = hudMsg.userData.ctx;
+  x.clearRect(0, 0, 1024, 256);
+  rr(x, 10, 40, 1004, 176, 40);
+  x.fillStyle = 'rgba(8,12,28,0.78)'; x.fill();
+  x.lineWidth = 8; x.strokeStyle = color || '#ffd84d'; x.stroke();
+  let fs = 80;
+  x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = '#fff';
+  x.shadowColor = color || '#ffd84d'; x.shadowBlur = 24;
+  do { x.font = '900 ' + fs + 'px system-ui, sans-serif'; fs -= 4; } while (x.measureText(text).width > 940 && fs > 24);
+  x.fillText(text, 512, 132);
+  x.shadowBlur = 0;
+  hudMsg.userData.tex.needsUpdate = true;
+  hudT = secs || 3;
+}
+
+const vig = mk(1.0, 1.0, 256, 256, 'vig', 0, 0, 0);
+vig.visible = false; vig.renderOrder = 9; vig.material.depthTest = false; scene.add(vig);
+{
+  const x = vig.userData.ctx, g = x.createRadialGradient(128, 128, 60, 128, 128, 128);
+  g.addColorStop(0, 'rgba(255,0,0,0)'); g.addColorStop(1, 'rgba(255,0,0,0.95)');
+  x.fillStyle = g; x.fillRect(0, 0, 256, 256); vig.userData.tex.needsUpdate = true;
+}
+
+const belt = mk(0.36, 0.09, 720, 180, 'belt', 0, 0, 0);
+belt.visible = false; belt.renderOrder = 8; belt.material.depthTest = false; scene.add(belt);
+function drawBelt() {
+  const x = belt.userData.ctx, W = 720, H = 180;
+  x.clearRect(0, 0, W, H);
+  const tc = myTeam === 'red' ? '#ff4d4d' : '#2f8bff';
+  rr(x, 6, 6, W - 12, H - 12, 28);
+  x.fillStyle = 'rgba(8,12,28,0.82)'; x.fill(); x.lineWidth = 6; x.strokeStyle = tc; x.stroke();
+  const f = myHealth / 100;
+  x.fillStyle = 'rgba(255,255,255,0.12)'; rr(x, 28, 74, W - 56, 44, 16); x.fill();
+  if (f > 0) { x.fillStyle = f > 0.6 ? '#3bff7a' : f > 0.3 ? '#ffd84d' : '#ff3b3b'; rr(x, 28, 74, Math.max(24, (W - 56) * f), 44, 16); x.fill(); }
+  x.fillStyle = '#fff'; x.font = '800 40px system-ui, sans-serif'; x.textBaseline = 'middle';
+  x.textAlign = 'left'; x.fillText('HP ' + myHealth, 32, 44);
+  x.textAlign = 'right'; x.fillText('BLU ' + teamScore.blue + '  ·  ' + teamScore.red + ' ROSSI', W - 32, 44);
+  if (dead) { x.textAlign = 'center'; x.fillStyle = '#ff6b6b'; x.fillText('ELIMINATO · ' + Math.max(0, Math.ceil(respawnT)) + 's', W / 2, 148); }
+  belt.userData.tex.needsUpdate = true;
+}
+
+function shockwave(pos, color, maxR) {
+  const m = new THREE.Mesh(
+    new THREE.RingGeometry(0.9, 1, 48).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false })
+  );
+  m.position.copy(pos); m.position.y += 0.05;
+  scene.add(m);
+  fx.push({ m, t: 0, max: maxR || 12 });
+}
+
+let capP = 0, capTeam = 'blue';
+let capRing = null;
+function updateCapRing() {
+  if (!single.flag || gamePhase !== 'play' || capP <= 0.003) { if (capRing) capRing.visible = false; return; }
+  if (!capRing) {
+    capRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.95, 1, 48).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false })
+    );
+    scene.add(capRing);
+  }
+  capRing.visible = true;
+  capRing.material.color.setHex(COL[capTeam]);
+  capRing.position.set(single.flag.position.x, single.flag.position.y + 0.04, single.flag.position.z);
+  capRing.scale.setScalar(Math.max(0.02, capP * 1.9));
+}
+
+function resetStats() {
+  teamScore.blue = teamScore.red = 0;
+  myHealth = 100; dead = false; invuln = 0; hurtFlash = 0; capP = 0;
+  drawBelt();
+}
+function hurt(d) {
+  if (gamePhase !== 'play' || dead || invuln > 0) return;
+  myHealth = Math.max(0, myHealth - d);
+  hurtFlash = 1;
+  audio.playHurt();
+  if (inAR) ctrls.forEach(c => buzz(c, 0.7, 90));
+  if (myHealth <= 0) die();
+  drawBelt();
+}
+function die() {
+  dead = true; respawnT = RESPAWN_S;
+  if (gameMode === 'dm') {
+    const en = myTeam === 'blue' ? 'red' : 'blue';
+    if (isGuest()) { if (mpConns[0] && mpConns[0].open) mpConns[0].send({ type: 'kill', team: en }); }   // l'host conta e rimanda a tutti
+    else onKill(en, true);
+  }
+  rightBlaster.visible = false;
+  say(offline && lastAttacker ? 'Eliminato da ' + lastAttacker + '! Rinasci tra ' + RESPAWN_S + 's' : 'ELIMINATO! Rinasci tra ' + RESPAWN_S + ' secondi', '#ff3b3b', RESPAWN_S);
+}
+function respawn() {
+  dead = false; myHealth = 100; invuln = 2;
+  rightBlaster.visible = (gamePhase === 'play');
+  say('DI NUOVO IN GIOCO!', '#3bff7a', 2);
+  drawBelt();
+}
+function onFlagCaptured(team, local) {
+  teamScore[team] += 100;
+  showFlagCapturedEffects(team);
+  drawBelt();
+  if (local && mpPeer) broadcast({ type: 'flag_capture', team });
+  if (teamScore[team] >= WIN_SCORE) endMatch(team);
+}
+// Solo sparatoria: ogni eliminazione = +1 punto alla squadra avversaria della vittima
+function onKill(team, local) {
+  if (gameMode !== 'dm' || gamePhase !== 'play') return;
+  teamScore[team] += 1;
+  drawBelt();
+  if (local && mpPeer) broadcast({ type: 'kill', team });
+  if (teamScore[team] >= KILL_WIN) endMatch(team);
+}
+function endMatch(team) {
+  gamePhase = 'ended';
+  clearBots();
+  rightBlaster.visible = false;
+  if (capRing) capRing.visible = false;
+  const pos = single.flag ? single.flag.position : new THREE.Vector3();
+  shockwave(pos, COL[team], 25);
+  say(team === 'blue' ? 'VINCONO I BLU!' : 'VINCONO I ROSSI!', team === 'blue' ? '#2f8bff' : '#ff4d4d', 8);
+  setTimeout(() => {
+    resetStats();
+    gamePhase = 'team_select';
+    placeTeamTerminal(true, 0);
+    updatePhaseUI();
+  }, 8000);
+}
+
+function updateHud(dt) {
+  const q = camera.quaternion, p = camera.position;
+  if (hudT > 0) {
+    hudT -= dt; hudMsg.visible = hudT > 0;
+    hudMsg.material.opacity = Math.min(1, hudT * 2.5);
+    _hv.set(0, 0.2, -1.2).applyQuaternion(q);
+    hudMsg.position.copy(p).add(_hv); hudMsg.quaternion.copy(q);
+  } else hudMsg.visible = false;
+  if (hurtFlash > 0) {
+    hurtFlash = Math.max(0, hurtFlash - dt * 1.6);
+    vig.visible = hurtFlash > 0; vig.material.opacity = hurtFlash * 0.85;
+    _hv.set(0, 0, -0.35).applyQuaternion(q);
+    vig.position.copy(p).add(_hv); vig.quaternion.copy(q);
+  } else vig.visible = false;
+  belt.visible = (gamePhase === 'play' || gamePhase === 'ended');
+  if (belt.visible) {
+    _bf.set(0, 0, -1).applyQuaternion(q); _bf.y = 0;
+    if (_bf.lengthSq() > 0.04) { _bf.normalize(); beltDir.lerp(_bf, 1 - Math.exp(-6 * dt)).normalize(); }
+    belt.position.set(p.x + beltDir.x * 0.5, p.y - 0.6, p.z + beltDir.z * 0.5);
+    belt.rotation.set(-0.85, Math.atan2(-beltDir.x, -beltDir.z), 0, 'YXZ');
+  }
+  if (dead) {
+    const s = Math.ceil(respawnT);
+    respawnT -= dt;
+    if (Math.ceil(respawnT) !== s) drawBelt();
+    if (respawnT <= 0) respawn();
+  }
+  if (invuln > 0) invuln -= dt;
+  for (let i = fx.length - 1; i >= 0; i--) {
+    const e = fx[i];
+    e.t += dt / 1.1;
+    if (e.t >= 1) { scene.remove(e.m); e.m.geometry.dispose(); e.m.material.dispose(); fx.splice(i, 1); continue; }
+    e.m.scale.setScalar(1 + e.t * e.max);
+    e.m.material.opacity = 0.9 * (1 - e.t);
+  }
+}
+drawBelt();
+
+function startMatchCountdown() {
+  gamePhase = 'countdown';
+  resetStats();
+  if (offline) spawnBots();
+  updatePhaseUI();
+  updateBlasterColors();
+
+  let count = 3;
+  const overlay = document.getElementById('countdown-overlay');
+  const num = document.getElementById('countdown-number');
+  overlay.style.opacity = '1';
+  cdMesh.visible = true;
+
+  const tick = () => {
+    num.textContent = count > 0 ? count : 'INGAGGIO!';
+    drawCountdown(count > 0 ? count : 'VIA!');
+    num.style.transform = 'scale(1.25)';
+    audio.playCountdown(count);
+    setTimeout(() => { num.style.transform = 'scale(0.85)'; }, 200);
+
+    if (count > 0) {
+      count--;
+      setTimeout(tick, 900);
+    } else {
+      setTimeout(() => {
+        overlay.style.opacity = '0';
+        cdMesh.visible = false;
+        gamePhase = 'play';
+        updatePhaseUI();
+        showGameStartEffects();
+      }, 600);
+    }
+  };
+  tick();
+}
+
+function showGameStartEffects() {
+  audio.playGameStart();
+  if (single.flag) shockwave(single.flag.position, 0xffd84d, 22);
+  ['blue', 'red'].forEach(k => { if (single[k]) shockwave(single[k].position, COL[k], 14); });
+  showBanner('⚔️ PARTITA INIZIATA! DOPPIE ARMI ATTIVE!');
+
+  ['blue', 'red'].forEach(k => {
+    const baseObj = single[k];
+    if (!baseObj) return;
+    const col = COL[k];
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.12, 0.2, 45, 16, 1, true),
+      new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })
+    );
+    beam.position.copy(baseObj.position);
+    beam.position.y += 22.5;
+    scene.add(beam);
+
+    let fade = 1.0;
+    const intv = setInterval(() => {
+      fade -= 0.04;
+      beam.material.opacity = fade;
+      if (fade <= 0) { clearInterval(intv); scene.remove(beam); beam.geometry.dispose(); }
+    }, 40);
+  });
+}
+
+function showFlagCapturedEffects(team) {
+  audio.playCaptureSuccess(team);
+  const flagObj = single.flag;
+  const pos = flagObj ? flagObj.position : new THREE.Vector3(0, 0, 0);
+  const col = COL[team];
+
+  shockwave(pos, col, 10);
+  for (let i = 0; i < 6; i++) spawnImpactSparks(pos.clone().setY(pos.y + 1), new THREE.Vector3(0, 1, 0), team);
+  showBanner('🚩 BANDIERA CONQUISTATA DAI ' + (team === 'blue' ? 'BLU' : 'ROSSI') + '! (+100 PT)');
+
+  if (flagObj && flagObj.userData.flagObj && flagObj.userData.flagObj.userData.clothMesh) {
+    const cloth = flagObj.userData.flagObj.userData.clothMesh;
+    if (flagMaterials[team]) cloth.material = flagMaterials[team];
+  }
+}
+
+// ============================================================================
+// 13. MULTIPLAYER P2P WEBRTC (Host + ingresso automatico sulla stessa rete)
+// ============================================================================
+let mpPeer = null, mpConns = [], isHost = false, joinTimer = null, netGen = 0;
+const remotePlayers = {};
+const MAX_PLAYERS = 10, TEAM_MAX = 5;
+let ROOM = '';
+var lobbyView = [];           // elenco giocatori (id, nome, squadra), uguale per tutti
+const lobby = {};             // solo host: id -> { name, team }
+const RELAY = { shoot: 1, player_pose: 1 };
+const hostPeerId = () => 'lasertag-' + ROOM + '-host';
+function genRoom() { const a = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; let r = ''; for (let i = 0; i < 4; i++) r += a[Math.floor(Math.random() * a.length)]; return r; }
+function teamCount(t) { if (offline) return offlineN; return lobbyView.length ? lobbyView.filter(p => p.team === t).length : (myTeam === t ? 1 : 0); }
+const hostStatus = () => '✓ Host attivo · CODICE STANZA: ' + ROOM + ' · Giocatori: ' + (mpConns.length + 1) + '/' + MAX_PLAYERS;
+
+function updateMpStatus(str) {
+  const el = document.getElementById('net-status');
+  if (el) el.textContent = str;
+}
+
+function resetPeer() {
+  netGen++;
+  clearTimeout(joinTimer);
+  joinTimer = null;
+  mpConns.length = 0;
+  if (mpPeer) { try { mpPeer.destroy(); } catch (e) {} mpPeer = null; }
+}
+
+function arenaPayload() {
+  return {
+    type: 'init_world',
+    mode: gameMode,
+    world: worldOn,
+    arena: {
+      walls: walls.map(o => [...pack(o), o.userData.kind]),
+      blue: single.blue && pack(single.blue),
+      red: single.red && pack(single.red),
+      flag: single.flag && pack(single.flag)
+    }
+  };
+}
+
+// ---- Lobby e squadre (l'host decide: max 5 per squadra, max 10 giocatori)
+function applyLobby(pl) {
+  lobbyView = pl;
+  const me = mpPeer && pl.find(x => x.id === mpPeer.id);
+  if (me && me.team !== myTeam) { myTeam = me.team; updateBlasterColors(); }
+  updateVrTeamCards();
+}
+function pushLobby() {
+  if (!isHost) return;
+  const pl = Object.entries(lobby).map(([id, v]) => ({ id, name: v.name, team: v.team }));
+  broadcast({ type: 'lobby', players: pl });
+  applyLobby(pl);
+}
+function pickTeam(id, team) {
+  if (team !== 'blue' && team !== 'red') return false;
+  if (!lobby[id]) { if (mpPeer && id === mpPeer.id) { myTeam = team; updateBlasterColors(); updateVrTeamCards(); } return true; }
+  if (lobby[id].team === team) return true;
+  if (teamCount(team) >= TEAM_MAX) { if (mpPeer && id === mpPeer.id) say('Squadra piena (max ' + TEAM_MAX + ')', '#ff6b6b', 2); return false; }
+  lobby[id].team = team;
+  pushLobby();
+  return true;
+}
+function removePlayer(id) {
+  if (remotePlayers[id]) { scene.remove(remotePlayers[id]); delete remotePlayers[id]; }
+  delete lobby[id];
+  broadcast({ type: 'left', id });
+  pushLobby();
+}
+
+function becomeHost() {
+  if (typeof Peer === 'undefined') { updateMpStatus('Multiplayer non disponibile: serve la connessione internet per PeerJS.'); return; }
+  isHost = true;
+  ROOM = genRoom();
+  resetPeer();
+  Object.keys(lobby).forEach(k => delete lobby[k]);
+  lobbyView = [];
+  const gen = netGen;
+  updateMpStatus('Avvio host...');
+  try { mpPeer = new Peer(hostPeerId(), { debug: 1 }); } catch (e) { updateMpStatus('Errore: ' + e.message); isHost = false; return; }
+
+  mpPeer.on('open', id => {
+    if (gen !== netGen) return;
+    lobby[id] = { name: myPlayerName, team: myTeam };
+    const b = document.getElementById('btn-host');
+    b.classList.add('on');
+    b.textContent = '👑 Stanza ' + ROOM;
+    updateMpStatus(hostStatus());
+    showBanner('STANZA ' + ROOM);
+    pushLobby();
+  });
+  mpPeer.on('connection', conn => { if (gen === netGen) setupConn(conn, gen); });
+  mpPeer.on('error', err => {
+    if (gen !== netGen) return;
+    if (err.type === 'unavailable-id') becomeHost();   // codice gia' usato: ne genero un altro
+    else updateMpStatus('Stato rete: ' + err.type);
+  });
+}
+
+function joinRoom(code) {
+  const inp = document.getElementById('room-input');
+  code = String(code || (inp && inp.value) || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (code.length !== 4) { updateMpStatus('Inserisci il codice stanza di 4 caratteri'); return; }
+  ROOM = code; isHost = false;
+  try { localStorage.setItem('lt-room', ROOM); } catch (e) {}
+  startAutoJoin();
+}
+
+function scheduleJoin(ms) {
+  clearTimeout(joinTimer);
+  joinTimer = setTimeout(startAutoJoin, ms);
+}
+
+function startAutoJoin() {
+  if (isHost || !ROOM) return;
+  if (typeof Peer === 'undefined') { updateMpStatus('Multiplayer non disponibile: serve la connessione internet per PeerJS.'); return; }
+  resetPeer();
+  const gen = netGen;
+  updateMpStatus('🔎 Cerco la stanza ' + ROOM + '...');
+  try { mpPeer = new Peer('lasertag-' + ROOM + '-p-' + Math.floor(Math.random() * 1000000), { debug: 1 }); } catch (e) { scheduleJoin(5000); return; }
+
+  mpPeer.on('open', () => {
+    if (gen !== netGen) return;
+    const conn = mpPeer.connect(hostPeerId(), { reliable: true });
+    setupConn(conn, gen);
+    joinTimer = setTimeout(() => { if (gen === netGen && !conn.open) startAutoJoin(); }, 8000);
+  });
+  mpPeer.on('error', err => {
+    if (gen !== netGen || isHost) return;
+    updateMpStatus(err.type === 'peer-unavailable' ? '🔎 Nessuna stanza ' + ROOM + ', riprovo...' : 'Stato rete: ' + err.type + ' (riprovo)');
+    scheduleJoin(4000);
+  });
+}
+
+function setupConn(conn, gen) {
+  conn.on('open', () => {
+    if (gen !== netGen) return;
+    clearTimeout(joinTimer);
+    if (isHost) {
+      if (mpConns.length + 1 >= MAX_PLAYERS) { try { conn.send({ type: 'full' }); } catch (e) {} setTimeout(() => conn.close(), 400); return; }
+      mpConns.push(conn);
+      showBanner('NUOVO GIOCATORE CONNESSO!');
+    } else {
+      mpConns.push(conn);
+      conn.send({ type: 'hello', name: myPlayerName });
+      updateMpStatus('✓ Connesso alla stanza ' + ROOM);
+      showBanner('CONNESSO ALLA PARTITA');
+    }
+  });
+  conn.on('data', data => {
+    handleNetMessage(data, conn);
+    if (isHost && data && RELAY[data.type]) mpConns.forEach(c => { if (c !== conn && c.open) c.send(data); });
+  });
+  conn.on('close', () => {
+    if (gen !== netGen) return;
+    const idx = mpConns.indexOf(conn);
+    if (idx >= 0) mpConns.splice(idx, 1);
+    if (isHost) { removePlayer(conn.peer); updateMpStatus(hostStatus()); }
+    else { updateMpStatus('Host perso, riconnessione...'); scheduleJoin(3000); }
+  });
+}
+
+function broadcast(msg) {
+  mpConns.forEach(c => { if (c.open) c.send(msg); });
+}
+
+function broadcastArena() {
+  if (isHost && mpPeer) broadcast(arenaPayload());
+}
+
+function handleNetMessage(m, conn) {
+  if (!m || !m.type) return;
+  if (m.type === 'init_world' && !isHost && m.arena) {
+    if (m.mode) setGameMode(m.mode, true);
+    if (m.world !== undefined) setWorld(m.world, true);
+    clearAll(true);
+    (m.arena.walls || []).forEach(([x, z, a, k]) => walls.push(spawn(WSPEC[k] ? k : 'wall', x, z, a)));
+    ['blue', 'red', 'flag'].forEach(k => {
+      if (m.arena[k]) single[k] = spawn(k, m.arena[k][0], m.arena[k][1], m.arena[k][2]);
+    });
+    rebuildWallCache();
+    refresh();
+  } else if (m.type === 'hello' && isHost && conn) {
+    lobby[conn.peer] = { name: String(m.name || 'Giocatore').slice(0, 14), team: teamCount('blue') <= teamCount('red') ? 'blue' : 'red' };
+    conn.send(arenaPayload());
+    conn.send({ type: 'state', phase: gamePhase, score: { blue: teamScore.blue, red: teamScore.red } });
+    updateMpStatus(hostStatus());
+    pushLobby();
+  } else if (m.type === 'team_pick' && isHost && conn) {
+    if (pickTeam(conn.peer, m.team) === false) conn.send({ type: 'denied' });
+  } else if (m.type === 'denied') {
+    say('Squadra piena (max ' + TEAM_MAX + ')', '#ff6b6b', 2);
+  } else if (m.type === 'lobby' && !isHost) {
+    applyLobby(m.players || []);
+  } else if (m.type === 'state' && !isHost) {
+    teamScore.blue = m.score.blue; teamScore.red = m.score.red;
+    if (m.phase === 'play' || m.phase === 'countdown') { gamePhase = 'play'; updatePhaseUI(); }
+    drawBelt();
+  } else if (m.type === 'left') {
+    if (remotePlayers[m.id]) { scene.remove(remotePlayers[m.id]); delete remotePlayers[m.id]; }
+  } else if (m.type === 'full') {
+    netGen++; clearTimeout(joinTimer);
+    updateMpStatus('Stanza piena (max ' + MAX_PLAYERS + ' giocatori)');
+  } else if (m.type === 'shoot') {
+    const org = new THREE.Vector3(...m.origin);
+    const dir = new THREE.Vector3(...m.dir);
+    shootLaser(org, dir, m.team, m.isLeft, false);
+  } else if (m.type === 'kill') {
+    onKill(m.team, false);
+    if (isHost) broadcast(m);
+  } else if (m.type === 'flag_capture' && !isHost) {
+    onFlagCaptured(m.team, false);
+  } else if (m.type === 'cap' && !isHost) {
+    capTeam = m.team; capP = m.p;
+  } else if (m.type === 'team_start' && !isHost) {
+    startMatchCountdown();
+  } else if (m.type === 'player_pose') {
+    updateRemotePlayer(m);
+  }
+}
+
+// --- Caschetto + avatar: segue testa (posizione + rotazione 3D) e corpo (solo direzione, si abbassa con la testa)
+const _ae = new THREE.Euler();
+const TEAM_HEX = { blue: 0x2f8bff, red: 0xff3b3b };
+function createPlayerAvatar(team, name) {
+  const g = new THREE.Group();
+  const shellM = new THREE.MeshStandardMaterial({ color: 0x1b2236, metalness: 0.85, roughness: 0.35 });
+  const glowM = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  const darkM = new THREE.MeshStandardMaterial({ color: 0x0c0f1a, metalness: 0.9, roughness: 0.25 });
+
+  // Casco: origine = posizione degli occhi (camera). Il centro della testa sta ~9 cm dietro e ~2 cm sopra.
+  const helmet = new THREE.Group();
+  const shell = new THREE.Group(); shell.position.set(0, 0.02, 0.085); helmet.add(shell);
+  shell.add(new THREE.Mesh(new THREE.SphereGeometry(0.17, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.72), shellM));
+  const visor = new THREE.Mesh(new THREE.CylinderGeometry(0.174, 0.174, 0.07, 24, 1, true, Math.PI - 0.9, 1.8), darkM);
+  visor.position.y = -0.02; shell.add(visor);
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.176, 0.176, 0.012, 24, 1, true, Math.PI - 0.9, 1.8), glowM);
+  band.position.y = 0.022; shell.add(band);
+  const crest = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.02, 0.3), glowM);
+  crest.position.y = 0.168; shell.add(crest);
+  [-1, 1].forEach(sx => {
+    const ear = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.04, 16).rotateZ(Math.PI / 2), darkM);
+    ear.position.set(sx * 0.172, -0.03, 0); shell.add(ear);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.006, 8, 20).rotateY(Math.PI / 2), glowM);
+    ring.position.set(sx * 0.194, -0.03, 0); shell.add(ring);
+  });
+  // Logo della scuola al centro della fronte (e dietro)
+  const logoF = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.11), logoMat);
+  logoF.position.set(0, 0.075, -0.157); logoF.rotation.set(-0.45, Math.PI, 0, 'YXZ'); shell.add(logoF);
+  const logoB = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.11), logoMat);
+  logoB.position.set(0, 0.075, 0.157); logoB.rotation.set(0.45, 0, 0); shell.add(logoB);
+
+  // Corpo: segue solo la direzione, si abbassa quando ci si accuccia
+  const body = new THREE.Group();
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.44, 0.19), shellM);
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.03, 16).rotateX(Math.PI / 2), glowM);
+  core.position.set(0, 0.04, -0.105); torso.add(core);
+  const legs = new THREE.Mesh(new THREE.BoxGeometry(0.28, 1, 0.17), darkM);
+  body.add(torso, legs);
+
+  // Nome sopra il casco
+  const lc = document.createElement('canvas'); lc.width = 256; lc.height = 64;
+  const ltex = new THREE.CanvasTexture(lc);
+  const label = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.1), new THREE.MeshBasicMaterial({ map: ltex, transparent: true, depthWrite: false }));
+  label.renderOrder = 5;
+
+  g.add(helmet, body, label);
+  g.userData = { helmet, body, torso, legs, label, lc, ltex, glowM, name: name || 'Giocatore', team: null,
+    tpos: new THREE.Vector3(), cpos: new THREE.Vector3(), tq: new THREE.Quaternion(), cq: new THREE.Quaternion(), yaw: 0, last: performance.now(), fresh: true };
+  setAvatarTeam(g, team);
+  scene.add(g);
+  return g;
+}
+function setAvatarTeam(av, team) {
+  const u = av.userData; if (u.team === team) return;
+  u.team = team;
+  const hex = TEAM_HEX[team] || TEAM_HEX.blue;
+  u.glowM.color.setHex(hex);
+  const x = u.lc.getContext('2d');
+  x.clearRect(0, 0, 256, 64);
+  rr(x, 2, 6, 252, 52, 18); x.fillStyle = 'rgba(8,12,28,0.78)'; x.fill();
+  x.lineWidth = 4; x.strokeStyle = '#' + hex.toString(16).padStart(6, '0'); x.stroke();
+  x.fillStyle = '#fff'; x.font = '800 30px system-ui, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(String(u.name).slice(0, 14), 128, 33);
+  u.ltex.needsUpdate = true;
+}
+function updateRemotePlayer(p) {
+  let av = remotePlayers[p.id];
+  if (!av) av = remotePlayers[p.id] = createPlayerAvatar(p.team, p.name);
+  const u = av.userData;
+  u.tpos.set(p.pos[0], p.pos[1], p.pos[2]);
+  if (p.rot) u.tq.set(p.rot[0], p.rot[1], p.rot[2], p.rot[3]);
+  if (u.fresh) { u.cpos.copy(u.tpos); u.cq.copy(u.tq); u.fresh = false; }
+  u.last = performance.now();
+  u.dead = !!p.d; av.visible = !u.dead;
+  if (p.team) setAvatarTeam(av, p.team);
+}
+function smoothRemotes(dt) {
+  const now = performance.now(), k = 1 - Math.exp(-18 * dt), kb = 1 - Math.exp(-5 * dt);
+  for (const id in remotePlayers) {
+    const av = remotePlayers[id], u = av.userData;
+    if (now - u.last > 4000) { scene.remove(av); delete remotePlayers[id]; continue; }
+    u.cpos.lerp(u.tpos, k); u.cq.slerp(u.tq, k);
+    u.helmet.position.copy(u.cpos); u.helmet.quaternion.copy(u.cq);
+    _ae.setFromQuaternion(u.cq, 'YXZ');
+    let d = _ae.y - u.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+    u.yaw += d * kb;
+    u.body.position.set(u.cpos.x, 0, u.cpos.z); u.body.rotation.y = u.yaw;
+    u.torso.position.y = u.cpos.y - 0.36;
+    const L = Math.max(0.15, u.cpos.y - 0.62);
+    u.legs.scale.y = L; u.legs.position.y = L / 2;
+    u.label.position.set(u.cpos.x, u.cpos.y + 0.36, u.cpos.z);
+    u.label.lookAt(camera.position);
+  }
+}
+
+// ============================================================================
+// 14. LOGICA DI GIOCO & CONQUISTA BANDIERA
+// ============================================================================
+let inCaptureZoneTime = 0;
+let capSendT = 0, capSent = 0;
+function flagLogic(dt) {
+  if (gamePhase !== 'play' || !single.flag || gameMode !== 'flag') { capP = 0; return; }
+  const f = single.flag.position;
+  let nb = 0, nr = 0;
+  const inZ = (x, z) => Math.hypot(x - f.x, z - f.z) < 1.9;
+  if (!dead && !playerInWall && inZ(camera.position.x, camera.position.z)) { if (myTeam === 'blue') nb++; else nr++; }
+  for (const id in remotePlayers) {
+    const u = remotePlayers[id].userData;
+    if (!u.dead && inZ(u.tpos.x, u.tpos.z)) { if (u.team === 'blue') nb++; else nr++; }
+  }
+  const own = nb > nr ? 'blue' : nr > nb ? 'red' : null;
+  if (own) {
+    if (own !== capTeam) { capTeam = own; capP = 0; }
+    capP = Math.min(1, capP + dt / 3.5);
+    if (capP >= 1) {
+      capP = 0;
+      onFlagCaptured(own, false);
+      if (mpPeer) broadcast({ type: 'flag_capture', team: own });
+    }
+  } else if (nb === 0 && nr === 0) capP = Math.max(0, capP - dt * 1.5 / 3.5);
+  // pari (contesa): il progresso resta fermo
+}
+// Le persone non possono essere spinte via dal visore (la posizione e' quella reale): se testa o busto
+// entrano in un muro scatta avviso + vibrazione + schermo rosso, e finche' sei dentro non puoi sparare ne' conquistare.
+function updatePlayerWallCollision(dt) {
+  const was = playerInWall;
+  playerInWall = false;
+  if (gamePhase === 'play' && !dead && walls.length && renderer.xr.isPresenting) {
+    const p = camera.position;
+    _wChest.set(p.x, p.y - 0.36, p.z);
+    playerInWall = pointInWall(p.x, p.y, p.z, 0.12) || pointInWall(_wChest.x, _wChest.y, _wChest.z, 0.2);
+  }
+  if (playerInWall) {
+    hurtFlash = Math.max(hurtFlash, 0.55);       // vignetta rossa fissa finche' sei nel muro
+    wallWarnT -= dt;
+    if (!was || wallWarnT <= 0) {
+      wallWarnT = 0.8;
+      say('MURO! Esci dal muro', '#ff3b3b', 1.0);
+      ctrls.forEach(c => buzz(c, 0.8, 120));
+    }
+  }
+}
+
+function checkFlagCapture(dt) {
+  if (!mpPeer || isHost) flagLogic(dt);
+  if (isHost && mpPeer) {
+    capSendT += dt;
+    if (capSendT > 0.2 && (capP > 0 || capSent > 0)) { capSendT = 0; capSent = capP; broadcast({ type: 'cap', team: capTeam, p: Math.round(capP * 1000) / 1000 }); }
+  }
+  updateCapRing();
+}
+
+// ============================================================================
+// 14c. MODALITA' OFFLINE "SFIDA NEON": BOT AVVERSARI E ALLEATI
+// ============================================================================
+// I bot usano gli stessi avatar dei giocatori remoti (remotePlayers): cosi' bandiera, vista e colpi
+// funzionano esattamente come in multiplayer. Sparano con shootLaser() e i loro colpi si fermano sui muri.
+const BOT_NAMES = ['Falco', 'Ombra', 'Vipera', 'Tuono', 'Nebula', 'Razzo', 'Lince', 'Drago', 'Fulmine', 'Cobra', 'Zeta', 'Orione'];
+const BOT_LEVELS = {
+  easy:   { speed: 1.4, err: 0.14, fire: 0.55, burst: 3, pause: 0.95, react: 0.85, range: 11, turn: 3.0 },
+  medium: { speed: 1.9, err: 0.075, fire: 0.38, burst: 4, pause: 0.6, react: 0.45, range: 15, turn: 5.0 },
+  hard:   { speed: 2.5, err: 0.04, fire: 0.26, burst: 6, pause: 0.4, react: 0.22, range: 20, turn: 8.0 }
+};
+const bots = [];
+const BOT_EYE = 1.6, BOT_R = 0.3;
+const PLAYER_T = { isPlayer: true };
+const botBounds = { x0: -6, x1: 6, z0: -6, z1: 6 };
+const _ba = new THREE.Vector3(), _bb = new THREE.Vector3(), _bo = new THREE.Vector3(), _bd = new THREE.Vector3();
+const _bh = new THREE.Vector3(), _bc = new THREE.Vector3(), _bseg = new THREE.Line3(), _bq = new THREE.Quaternion(), _be = new THREE.Euler();
+const BOT_STEER = [0, 0.55, -0.55, 1.1, -1.1, 1.7, -1.7];
+
+function clearBots() {
+  bots.forEach(b => { const av = remotePlayers[b.id]; if (av) { scene.remove(av); delete remotePlayers[b.id]; } });
+  bots.length = 0;
+}
+const botBlocked = (x, z) => walls.length > 0 && pointInWall(x, 0.5, z, BOT_R);
+
+function botSpawnPos(team) {
+  const base = single[team], bx = base ? base.position.x : 0, bz = base ? base.position.z : 0;
+  for (let k = 0; k < 16; k++) {
+    const a = Math.random() * Math.PI * 2, r = 0.9 + Math.random() * 0.9;
+    const x = bx + Math.cos(a) * r, z = bz + Math.sin(a) * r;
+    if (!botBlocked(x, z)) return [x, z];
+  }
+  return [bx, bz];
+}
+
+function spawnBots() {
+  clearBots();
+  // limiti di movimento: tutta l'arena (basi, bandiera, muri) + un po' di margine
+  const pts = [];
+  ['blue', 'red', 'flag'].forEach(k => { if (single[k]) pts.push(single[k].position); });
+  walls.forEach(w => pts.push(w.position));
+  if (!pts.length) pts.push({ x: 0, z: 0 });
+  botBounds.x0 = Math.min(...pts.map(q => q.x)) - 3; botBounds.x1 = Math.max(...pts.map(q => q.x)) + 3;
+  botBounds.z0 = Math.min(...pts.map(q => q.z)) - 3; botBounds.z1 = Math.max(...pts.map(q => q.z)) + 3;
+  if (worldOn) {   // nel mondo i bot restano dentro la palestra
+    botBounds.x0 = Math.max(botBounds.x0, -GYM.x); botBounds.x1 = Math.min(botBounds.x1, GYM.x);
+    botBounds.z0 = Math.max(botBounds.z0, -GYM.z); botBounds.z1 = Math.min(botBounds.z1, GYM.z);
+  }
+
+  const names = BOT_NAMES.slice().sort(() => Math.random() - 0.5);
+  const other = myTeam === 'blue' ? 'red' : 'blue';
+  const f = single.flag ? single.flag.position : { x: 0, z: 0 };
+  const make = (team, count) => {
+    for (let i = 0; i < count; i++) {
+      const [x, z] = botSpawnPos(team);
+      const b = {
+        id: 'bot-' + bots.length, name: names.pop() || ('Bot ' + (bots.length + 1)), team, x, z,
+        yaw: Math.atan2(-(f.x - x), -(f.z - z)), pitch: 0, hp: 100, dead: false, respT: 0, invuln: 1.5,
+        role: (gameMode === 'flag' && i % 2 === 0) ? 'cap' : 'hunt', fireCd: 0.5 + Math.random() * 0.6, burst: 0, seen: 0,
+        tgt: null, tgtT: Math.random() * 0.2, hx: null, hz: null, strafe: 1, strafeT: 0, steer: 1, stuckT: 0, scan: Math.random() < 0.5 ? -1 : 1
+      };
+      bots.push(b);
+      pushBotPose(b, true);
+    }
+  };
+  make(myTeam, offlineN - 1);   // alleati: io + (N-1) bot
+  make(other, offlineN);        // avversari: N bot
+}
+
+function pushBotPose(b, snap) {
+  _be.set(b.pitch, b.yaw, 0, 'YXZ'); _bq.setFromEuler(_be);
+  let av = remotePlayers[b.id];
+  if (!av) { av = remotePlayers[b.id] = createPlayerAvatar(b.team, b.name); snap = true; }
+  const u = av.userData;
+  u.tpos.set(b.x, BOT_EYE, b.z); u.tq.copy(_bq);
+  if (snap || u.fresh) { u.cpos.copy(u.tpos); u.cq.copy(u.tq); u.fresh = false; }
+  u.last = performance.now();
+  u.dead = b.dead; av.visible = !b.dead;
+}
+
+function botTargetPos(t, out) {
+  if (t.isPlayer) return out.set(camera.position.x, camera.position.y - 0.3, camera.position.z);
+  return out.set(t.x, BOT_EYE - 0.3, t.z);
+}
+const botAlive = t => t.isPlayer ? !dead : !t.dead;
+
+// Sceglie il nemico visibile piu' vicino (target di tiro) e ricorda dov'e' il nemico piu' vicino in assoluto (per i cacciatori)
+function botScan(b, L) {
+  let best = null, bd = 1e9, nd = 1e9;
+  b.hx = b.hz = null;
+  _ba.set(b.x, BOT_EYE - 0.2, b.z);
+  const consider = t => {
+    botTargetPos(t, _bb);
+    const d = Math.hypot(_bb.x - b.x, _bb.z - b.z);
+    if (d < nd) { nd = d; b.hx = _bb.x; b.hz = _bb.z; }
+    if (d < L.range && d < bd && (!walls.length || wallSegHit(_ba, _bb, null) < 0)) { bd = d; best = t; }
+  };
+  if (myTeam !== b.team && !dead) consider(PLAYER_T);
+  for (const o of bots) if (o.team !== b.team && !o.dead) consider(o);
+  if (best !== b.tgt) b.seen = 0;
+  b.tgt = best;
+}
+
+// Muove il bot di un passo nella direzione desiderata, aggirando i muri (prova angoli sempre piu' larghi)
+function botStep(b, dx, dz, speed, dt) {
+  const len = Math.hypot(dx, dz);
+  if (len < 1e-4) return;
+  const base = Math.atan2(dz, dx), step = speed * dt;
+  for (let i = 0; i < BOT_STEER.length; i++) {
+    const a = base + BOT_STEER[i] * b.steer;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    if (botBlocked(b.x + ca * (step + 0.2), b.z + sa * (step + 0.2))) continue;
+    b.x = Math.min(botBounds.x1, Math.max(botBounds.x0, b.x + ca * step));
+    b.z = Math.min(botBounds.z1, Math.max(botBounds.z0, b.z + sa * step));
+    b.stuckT = Math.max(0, b.stuckT - dt);
+    return;
+  }
+  b.stuckT += dt;
+  if (b.stuckT > 0.5) { b.steer = -b.steer; b.stuckT = 0; }
+}
+
+function botShoot(b, tp, L) {
+  _bo.set(b.x - Math.sin(b.yaw) * 0.45, BOT_EYE - 0.3, b.z - Math.cos(b.yaw) * 0.45);
+  _bd.set(tp.x - _bo.x, tp.y - _bo.y, tp.z - _bo.z).normalize();
+  _bd.x += (Math.random() - 0.5) * 2 * L.err; _bd.y += (Math.random() - 0.5) * 1.2 * L.err; _bd.z += (Math.random() - 0.5) * 2 * L.err;
+  _bd.normalize();
+  const dist = Math.hypot(b.x - camera.position.x, b.z - camera.position.z);
+  const slot = shootLaser(_bo, _bd, b.team, false, false, Math.max(0.04, 0.55 * (1 - dist / 22)));
+  if (slot) slot.bot = b;
+}
+
+function damageBot(b, d, l) {
+  b.hp -= d;
+  const mine = !l.remote;   // colpo sparato da me
+  if (mine) { audio.playHit(); if (inAR) ctrls.forEach(c => { if (c.userData.hand !== 'left') buzz(c, 0.3, 25); }); }
+  _bh.set(b.x, 1.3, b.z); _bc.set(0, 1, 0);
+  spawnImpactSparks(_bh, _bc, l.team);
+  if (b.hp > 0) return;
+  b.dead = true; b.hp = 0; b.respT = RESPAWN_S; b.tgt = null;
+  pushBotPose(b);
+  onKill(l.team, false);
+  if (mine) say('Hai eliminato ' + b.name + '!', '#3bff7a', 1.6);
+  else if (l.bot && b.team === myTeam) say(l.bot.name + ' ha eliminato ' + b.name, '#ff9d4d', 1.4);
+}
+
+// Un colpo (mio o di un altro bot) ha centrato un bot nemico? Controlla testa, busto e gambe lungo il tratto percorso
+function botsHitByLaser(l, a, bpos) {
+  _bseg.set(a, bpos);
+  for (let i = 0; i < bots.length; i++) {
+    const b = bots[i];
+    if (b.dead || b.invuln > 0 || b.team === l.team) continue;
+    let hit = false;
+    _bh.set(b.x, BOT_EYE + 0.02, b.z); _bseg.closestPointToPoint(_bh, true, _bc); hit = _bc.distanceTo(_bh) < 0.25;
+    if (!hit) { _bh.set(b.x, BOT_EYE - 0.36, b.z); _bseg.closestPointToPoint(_bh, true, _bc); hit = _bc.distanceTo(_bh) < 0.35; }
+    if (!hit) { _bh.set(b.x, 0.8, b.z); _bseg.closestPointToPoint(_bh, true, _bc); hit = _bc.distanceTo(_bh) < 0.3; }
+    if (hit) { damageBot(b, HIT_DMG, l); return true; }
+  }
+  return false;
+}
+
+function botRespawn(b) {
+  const [x, z] = botSpawnPos(b.team);
+  b.x = x; b.z = z; b.hp = 100; b.dead = false; b.invuln = 2; b.tgt = null; b.seen = 0; b.burst = 0;
+  pushBotPose(b, true);
+}
+
+function updateBots(dt) {
+  if (!offline || !bots.length || gamePhase !== 'play') return;
+  const L = BOT_LEVELS[botLevel] || BOT_LEVELS.medium;
+  const f = single.flag ? single.flag.position : null;
+  for (let i = 0; i < bots.length; i++) {
+    const b = bots[i];
+    if (b.dead) { b.respT -= dt; if (b.respT <= 0) botRespawn(b); continue; }
+    if (b.invuln > 0) b.invuln -= dt;
+    b.tgtT -= dt;
+    if (b.tgtT <= 0) { b.tgtT = 0.2 + Math.random() * 0.1; botScan(b, L); }
+    if (b.tgt && !botAlive(b.tgt)) { b.tgt = null; b.seen = 0; }
+
+    const flagD = f ? Math.hypot(f.x - b.x, f.z - b.z) : 99;
+    if (b.tgt) {
+      // ---- combattimento: guarda il bersaglio, si muove di lato, spara a raffiche
+      botTargetPos(b.tgt, _bb);
+      const dx = _bb.x - b.x, dz = _bb.z - b.z, d = Math.max(0.01, Math.hypot(dx, dz));
+      const want = Math.atan2(-dx, -dz);
+      let diff = want - b.yaw; diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      const m = L.turn * dt;
+      b.yaw += Math.max(-m, Math.min(m, diff));
+      const err = Math.max(0, Math.abs(diff) - m);
+      b.pitch = Math.max(-0.5, Math.min(0.5, Math.atan2(_bb.y - (BOT_EYE - 0.3), d)));
+      b.seen += dt;
+      b.strafeT -= dt;
+      if (b.strafeT <= 0) { b.strafeT = 0.8 + Math.random() * 1.4; b.strafe = Math.random() < 0.5 ? -1 : 1; }
+      const nx = dx / d, nz = dz / d;
+      let mx = -nz * b.strafe, mz = nx * b.strafe;
+      if (b.role === 'hunt') { if (d > 7) { mx += nx * 1.3; mz += nz * 1.3; } else if (d < 3) { mx -= nx; mz -= nz; } }
+      else if (f && flagD > 1.4) { mx += (f.x - b.x) / flagD * 1.3; mz += (f.z - b.z) / flagD * 1.3; }
+      else if (f && flagD > 1.0) { mx += (f.x - b.x) / flagD * 0.6; mz += (f.z - b.z) / flagD * 0.6; }
+      botStep(b, mx, mz, L.speed * 0.8, dt);
+      b.fireCd -= dt;
+      if (b.fireCd <= 0 && b.seen > L.react && err < 0.25) {
+        botShoot(b, _bb, L);
+        b.fireCd = L.fire;
+        if (++b.burst >= L.burst) { b.burst = 0; b.fireCd += L.pause * (0.7 + Math.random() * 0.6); }
+      }
+    } else {
+      // ---- nessun bersaglio: i "cap" vanno e restano sulla bandiera, gli "hunt" inseguono il nemico piu' vicino
+      b.seen = 0; b.pitch *= 0.9;
+      let tx = f ? f.x : b.x, tz = f ? f.z : b.z;
+      if (b.role === 'hunt' && b.hx !== null) { tx = b.hx; tz = b.hz; }
+      const dx = tx - b.x, dz = tz - b.z, d = Math.hypot(dx, dz);
+      if (b.role === 'cap' && d < 0.9) {
+        b.yaw += b.scan * dt * 0.9;                 // sulla bandiera: si guarda intorno
+      } else if (d > 0.3) {
+        botStep(b, dx, dz, L.speed, dt);
+        let diff = Math.atan2(-dx, -dz) - b.yaw; diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+        const m = L.turn * dt; b.yaw += Math.max(-m, Math.min(m, diff));
+      }
+    }
+    pushBotPose(b);
+  }
+}
+
+// ============================================================================
+// 14b. RADDRIZZA ARENA (sostituisce ancore e allineamento a 2 punti)
+// ============================================================================
+// Ogni sessione AR parte con una nuova origine. Per rimettere l'arena dritta rispetto a te:
+// guarda nella direzione che vuoi sia "avanti" e premi il CLICK DELLO STICK SINISTRO (anche in partita).
+// L'origine dell'arena viene portata dove ti trovi e ruotata secondo il tuo sguardo.
+let xrBase = null, recenterReq = false;
+const calib = { x: 0, z: 0, yaw: 0 };         // posa del sistema dell'arena nello spazio di base del visore
+const lastRef = { x: 0, z: 0, yaw: 0 };       // ultimo allineamento applicato
+const _aE = new THREE.Euler();
+const isGuest = () => !!mpPeer && !isHost;
+const rotXZ = (a, x, z) => [x * Math.cos(a) + z * Math.sin(a), -x * Math.sin(a) + z * Math.cos(a)];   // stessa convenzione di rotation.y
+
+function recenterArena() { recenterReq = true; }
+
+function resetArenaAnchor() {
+  xrBase = null; recenterReq = false;
+  calib.x = calib.z = calib.yaw = 0;
+  lastRef.x = lastRef.z = lastRef.yaw = 0;
+  try { if (renderer.xr.setReferenceSpace) renderer.xr.setReferenceSpace(null); } catch (e) {}
+}
+
+function applyRefSpace() {
+  const dy = Math.atan2(Math.sin(calib.yaw - lastRef.yaw), Math.cos(calib.yaw - lastRef.yaw));
+  if (Math.abs(calib.x - lastRef.x) > 0.002 || Math.abs(calib.z - lastRef.z) > 0.002 || Math.abs(dy) > 0.0015) {
+    lastRef.x = calib.x; lastRef.z = calib.z; lastRef.yaw = calib.yaw;
+    const q = { x: 0, y: Math.sin(calib.yaw / 2), z: 0, w: Math.cos(calib.yaw / 2) };
+    renderer.xr.setReferenceSpace(xrBase.getOffsetReferenceSpace(new XRRigidTransform({ x: calib.x, y: 0, z: calib.z }, q)));
+  }
+}
+
+function updateArenaAnchor(frame) {
+  if (!frame || !renderer.xr.isPresenting) return;
+  if (!xrBase) xrBase = renderer.xr.getReferenceSpace();            // lo spazio di base, prima di sostituirlo
+  if (!xrBase || !renderer.xr.setReferenceSpace) return;
+  let moved = false;
+  if (recenterReq) {
+    moved = true;
+    recenterReq = false;
+    // posa della testa nel sistema attuale -> diventa la nuova origine (solo piano: il pavimento resta orizzontale)
+    _aE.setFromQuaternion(camera.quaternion, 'YXZ');
+    const r = rotXZ(calib.yaw, camera.position.x, camera.position.z);
+    calib.x += r[0]; calib.z += r[1]; calib.yaw += _aE.y;
+    say('ARENA RADDRIZZATA \u2713', '#3bff7a', 2);
+    ctrls.forEach(k => buzz(k, 0.9, 120));
+  }
+  if (worldOn && !moved) updateWorldMove();
+  applyRefSpace();
+}
+
+// Mondo Istituto: stick sinistro = cammina (rispetto a dove guardi); non si puo' uscire dalla palestra
+let _wmT = 0;
+function updateWorldMove() {
+  const now = performance.now(), dt = Math.min(0.08, (now - _wmT) / 1000); _wmT = now;
+  const p = camera.position;
+  let vx = 0, vz = 0;
+  const lc = ctrls.find(c => c.userData.hand === 'left'), gp = lc && lc.userData.gp;
+  if (gp) {
+    const ax = gp.axes[2] || 0, ay = gp.axes[3] || 0;
+    if (Math.hypot(ax, ay) > 0.15) {
+      _aE.setFromQuaternion(camera.quaternion, 'YXZ');
+      const sn = Math.sin(_aE.y), cs = Math.cos(_aE.y), sp = WORLD_SPEED * dt;
+      vx = (sn * ay + cs * ax) * sp;
+      vz = (cs * ay - sn * ax) * sp;
+    }
+  }
+  const dx = Math.min(GYM.x, Math.max(-GYM.x, p.x + vx)) - p.x;   // include anche il "rientro" se cammini fuori dall'area
+  const dz = Math.min(GYM.z, Math.max(-GYM.z, p.z + vz)) - p.z;
+  if (Math.abs(dx) < 1e-4 && Math.abs(dz) < 1e-4) return;
+  const r = rotXZ(calib.yaw, dx, dz);      // spostare il giocatore di d nell'arena = spostare lo spazio di -R(d)
+  calib.x -= r[0]; calib.z -= r[1];
+}
+
+
+// ============================================================================
+// 15. MAIN LOOP
+// ============================================================================
+const hb = document.getElementById('hb'), hr = document.getElementById('hr');
+const btn = document.getElementById('btn');
+const btnOff = document.getElementById('btn-off');
+const arBtns = [btn, btnOff];
+
+function showBanner(text) {
+  const b = document.getElementById('banner');
+  b.textContent = text;
+  say(text, '#ffd84d', 3.5);
+  b.classList.add('show');
+  setTimeout(() => b.classList.remove('show'), 3500);
+}
+
+function refresh() {
+  if (hb) hb.textContent = (single.blue ? '✓ ' : '✗ ') + 'Base BLU';
+  if (hr) hr.textContent = (single.red ? '✓ ' : '✗ ') + 'Base ROSSA';
+  updatePhaseUI();
+  drawMenu();
+}
+
+let lastAnimT = performance.now();
+const _lp = new THREE.Vector3(), _lt = new THREE.Vector3(), _lc = new THREE.Vector3(), _lseg = new THREE.Line3();
+function segHitsMe() {
+  _lt.set(0, 0.02, 0.085).applyQuaternion(camera.quaternion).add(camera.position); // testa
+  _lseg.closestPointToPoint(_lt, true, _lc);
+  if (_lc.distanceTo(_lt) < 0.2) return true;
+  _lt.copy(camera.position); _lt.y -= 0.36; // busto
+  _lseg.closestPointToPoint(_lt, true, _lc);
+  return _lc.distanceTo(_lt) < 0.32;
+}
+function animate(time, frame) {
+  updateArenaAnchor(frame);
+  const t = (time || performance.now()) / 1000;
+  const now = performance.now();
+  const dt = Math.min(0.08, (now - lastAnimT) / 1000);
+  lastAnimT = now;
+
+  // Sventolio Bandiere (Mesh 24x16 ottimizzato)
+  world.traverse(o => {
+    if (o.userData && o.userData.isFlagCloth && o.userData.basePos) {
+      const pos = o.geometry.attributes.position;
+      const base = o.userData.basePos;
+      const count = pos.count;
+      for (let i = 0; i < count; i++) {
+        const ix = i * 3, iy = i * 3 + 1, iz = i * 3 + 2;
+        const x0 = base[ix], y0 = base[iy];
+        const u = Math.max(0, x0 / 0.85);
+
+        const wave1 = Math.sin(u * 6.8 - t * 5.2) * (u * 0.16);
+        const wave2 = Math.cos(u * 13.0 + y0 * 6.5 - t * 7.5) * (u * 0.04);
+        const wave3 = Math.sin(y0 * 4.5 + t * 3.5) * (u * 0.02);
+
+        pos.array[iz] = wave1 + wave2 + wave3;
+        pos.array[iy] = y0 + Math.sin(u * 4.0 - t * 3.0) * (u * 0.035);
+      }
+      pos.needsUpdate = true;
+      o.geometry.computeVertexNormals();
+    }
+  });
+
+  // Aggiornamento Proiettili Laser Pool
+  for (let i = 0; i < LASER_POOL_SIZE; i++) {
+    const l = laserPool[i];
+    if (!l.active) continue;
+    _lp.copy(l.mesh.position);
+    let step = l.speed * dt, blocked = false;
+    // il colpo si ferma sulla superficie del muro (visivamente e come danno)
+    if (l.travel + step >= l.wallDist) { step = Math.max(0, l.wallDist - l.travel); blocked = true; }
+    l.mesh.position.addScaledVector(l.dir, step);
+    l.travel += step;
+    if (l.remote && l.team !== myTeam && gamePhase === 'play' && !dead) {
+      _lseg.set(_lp, l.mesh.position);   // solo il tratto prima del muro: dietro al muro non si viene colpiti
+      if (segHitsMe()) { l.active = false; l.mesh.visible = false; if (l.bot) lastAttacker = l.bot.name; hurt(HIT_DMG); continue; }
+    }
+    // modalita' offline: i colpi (miei e dei bot) possono colpire i bot nemici
+    if (offline && bots.length && gamePhase === 'play' && botsHitByLaser(l, _lp, l.mesh.position)) { l.active = false; l.mesh.visible = false; continue; }
+    if (blocked) {
+      audio.playWallHit();
+      spawnImpactSparks(l.hitP, l.hitN, l.team);
+      l.active = false; l.mesh.visible = false;
+      continue;
+    }
+    l.life -= dt;
+    if (l.life <= 0) {
+      l.active = false;
+      l.mesh.visible = false;
+    }
+  }
+
+  // Aggiornamento Scintille Pool
+  for (let i = 0; i < SPARK_POOL_SIZE; i++) {
+    const s = sparkPool[i];
+    if (s.active) {
+      s.vel.y -= 9.8 * dt;
+      s.mesh.position.addScaledVector(s.vel, dt);
+      s.life -= dt;
+      if (s.life <= 0) {
+        s.active = false;
+        s.mesh.visible = false;
+      }
+    }
+  }
+
+  updatePlayerWallCollision(dt);
+  updateBots(dt);
+  checkFlagCapture(dt);
+
+  // Sync P2P Rete a 25Hz
+  window._netT = (window._netT || 0) + dt;
+  if (mpPeer && window._netT >= 0.05) {
+    window._netT = 0;
+    const p = camera.position, q = camera.quaternion;
+    broadcast({
+      type: 'player_pose',
+      id: mpPeer.id,
+      name: myPlayerName,
+      team: myTeam,
+      d: dead ? 1 : 0,
+      pos: [r3(p.x), r3(p.y), r3(p.z)],
+      rot: [r3(q.x), r3(q.y), r3(q.z), r3(q.w)]
+    });
+  }
+
+  if (renderer.xr.isPresenting) {
+    updateAR();
+    if (gamePhase === 'play' && !dead) updateRifle(dt);
+    else { rifleReady = false; twoHand = false; trigDown[0] = trigDown[1] = false; }
+  }
+  updateCountdownMesh(dt);
+  updateHud(dt);
+  smoothRemotes(dt);
+
+  renderer.render(scene, camera);
+}
+renderer.setAnimationLoop(animate);
+
+// ============================================================================
+// 16. AVVIO WEBXR AR
+// ============================================================================
+async function startAR() {
+  audio.ensure();
+  if (worldOn && schoolState !== 'ready') { showBanner(schoolState === 'error' ? 'Mondo non caricato: controlla la connessione' : 'Sto caricando il mondo... riprova tra qualche secondo'); if (schoolState !== 'loading') loadSchool(); return; }
+  const session = await navigator.xr.requestSession('immersive-ar', { optionalFeatures: ['local-floor'] });
+  scene.background = null;
+  inAR = true;
+  applyWorldVisual();
+  document.getElementById('main-card').style.display = 'none';
+  lastTime = performance.now();
+  renderer.xr.setReferenceSpaceType('local-floor');
+  try {
+    await renderer.xr.setSession(session);
+  } catch (e) {
+    try { await session.end(); } catch (_) {}
+    throw e;
+  }
+
+  say('Click STICK SINISTRO = raddrizza l\'arena dove guardi', '#ffd84d', 5);
+
+  // All'ingresso in AR, assicura che il menu sia aperto e che il tool di posa sia attivo
+  if (gamePhase === 'setup') {
+    menuOpen = true;
+    menuT = 1.0;
+    updatePhaseUI();
+  }
+
+  session.addEventListener('end', () => {
+    resetArenaAnchor();
+    inAR = false;
+    applyWorldVisual();
+    document.getElementById('main-card').style.display = '';
+    arBtns.forEach(b => { b.style.display = ''; });
+    if (offline) {
+      clearBots();
+      if (gamePhase === 'play' || gamePhase === 'ended') { resetStats(); gamePhase = 'team_select'; placeTeamTerminal(true, 0); updatePhaseUI(); }
+    }
+  });
+}
+
+async function initAR() {
+  const st = document.getElementById('ar-status');
+  if (!navigator.xr || !(await navigator.xr.isSessionSupported('immersive-ar').catch(() => false))) {
+    arBtns.forEach(b => { b.textContent = 'AR non disponibile su questo dispositivo'; });
+    st.textContent = '\u26A0 AR non disponibile su questo dispositivo'; st.className = 'ar-pill no';
+    return;
+  }
+  arBtns.forEach(b => { b.disabled = false; b.textContent = 'Avvia AR sul Visore'; b.onclick = startAR; });
+  st.textContent = '\u2713 Visore AR pronto'; st.className = 'ar-pill ok';
+}
+
+// ---- Schermate della card iniziale: scelta modalita' / Sfida Neon (offline) / Multiplayer
+function showView(v) {
+  ['home', 'offline', 'multi'].forEach(k => { document.getElementById('view-' + k).style.display = (k === v) ? '' : 'none'; });
+  document.getElementById('main-card').scrollTop = 0;
+}
+function resetNetUi() {
+  resetPeer();
+  isHost = false; ROOM = ''; lobbyView = [];
+  Object.keys(lobby).forEach(k => delete lobby[k]);
+  const b = document.getElementById('btn-host');
+  b.classList.remove('on');
+  b.innerHTML = "&#128081; Sono l'Host &mdash; crea la partita";
+  updateMpStatus('Crea la partita (Host) oppure inserisci il codice stanza');
+}
+function openOffline() { resetNetUi(); offline = true; updateOfflineUi(); showView('offline'); }
+function openMulti() { offline = false; clearBots(); showView('multi'); }
+function goHome() { offline = false; clearBots(); resetNetUi(); showView('home'); }
+function setFormat(n) { offlineN = n; updateOfflineUi(); }
+function setLevel(l) { botLevel = l; updateOfflineUi(); }
+function updateOfflineUi() {
+  document.querySelectorAll('#chips-fmt .chip').forEach(c => c.classList.toggle('sel', +c.dataset.n === offlineN));
+  document.querySelectorAll('#chips-lv .chip').forEach(c => c.classList.toggle('sel', c.dataset.l === botLevel));
+  const n = offlineN, al = n - 1;
+  document.getElementById('off-info').innerHTML = '<b>' + n + 'v' + n + '</b> &middot; ' +
+    (al === 0 ? 'tu da solo' : 'tu + ' + al + (al === 1 ? ' bot alleato' : ' bot alleati')) +
+    ' contro ' + n + (n === 1 ? ' bot nemico' : ' bot nemici');
+}
+
+document.getElementById('main-logo').src = LOGO_SRC;
+updateOfflineUi();
+updateModeUi();
+initAR();
+refresh();
+(function () {
+  let c = null;
+  try { c = new URLSearchParams(location.search).get('stanza'); } catch (e) {}
+  const inp = document.getElementById('room-input');
+  if (c) { if (inp) inp.value = c.toUpperCase().slice(0, 4); showView('multi'); joinRoom(c); }
+  else { try { const r = localStorage.getItem('lt-room'); if (r && inp) inp.value = r; } catch (e) {} }
+})();
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
