@@ -160,6 +160,7 @@ canvas { display: block; touch-action: none; }
 }
 .chip.sel { background: linear-gradient(135deg, #ff8a3d, #e0561a); color: #fff; border-color: #ffb17a; box-shadow: 0 0 16px rgba(255, 120, 40, 0.4); }
 .chips.lv .chip { font-size: 13px; }
+.chips.lv .chip[data-m] { font-size: 12px; padding: 11px 4px; }
 .off-info { font-size: 13px; color: #c9d2f0; background: rgba(16, 24, 46, 0.85); border-radius: 12px; padding: 10px 12px; margin: 4px 0 14px; line-height: 1.4; }
 #main-card .hint { margin-top: 12px; font-size: 12px; color: #7f8fb8; line-height: 1.4; }
 #main-card .foot { margin-top: 12px; font-size: 10px; opacity: 0.55; line-height: 1.4; }
@@ -193,6 +194,11 @@ canvas { display: block; touch-action: none; }
 
   <!-- Schermata 2: Sfida Neon (offline contro i bot) -->
   <div id="view-offline" class="view" style="display:none">
+    <div class="opt-title">Modalit&agrave; di gioco</div>
+    <div class="chips lv">
+      <button class="chip" data-m="flag" onclick="setGameMode('flag')">&#128681; Conquista la bandiera</button>
+      <button class="chip" data-m="dm" onclick="setGameMode('dm')">&#127919; Solo sparatoria</button>
+    </div>
     <div class="opt-title">Formato partita</div>
     <div class="chips" id="chips-fmt">
       <button class="chip" data-n="1" onclick="setFormat(1)">1v1</button>
@@ -212,12 +218,17 @@ canvas { display: block; touch-action: none; }
       <button id="btn-off" class="btn-primary" disabled>Controllo AR...</button>
       <button class="btn-back" onclick="goHome()">&lsaquo; Indietro</button>
     </div>
-    <div class="hint">Nel visore piazzi Base BLU, Base ROSSA e Bandiera Centro, scegli la squadra e avvii: i bot completano le squadre. Vince chi arriva a 500 punti conquistando la bandiera.</div>
+    <div class="hint" id="off-hint"></div>
   </div>
 
   <!-- Schermata 3: Multiplayer -->
   <div id="view-multi" class="view" style="display:none">
     <div id="net-status" class="net-status">Crea la partita (Host) oppure inserisci il codice stanza</div>
+    <div class="opt-title">Modalit&agrave; (la sceglie l'host)</div>
+    <div class="chips lv">
+      <button class="chip" data-m="flag" onclick="setGameMode('flag')">&#128681; Conquista la bandiera</button>
+      <button class="chip" data-m="dm" onclick="setGameMode('dm')">&#127919; Solo sparatoria</button>
+    </div>
     <div class="btn-col">
       <button id="btn" class="btn-primary" disabled>Controllo AR...</button>
       <button id="btn-host" class="btn-host" onclick="becomeHost()">&#128081; Sono l'Host &mdash; crea la partita</button>
@@ -260,6 +271,8 @@ let ang = 0;
 let offline = false;          // modalita' "Sfida Neon": partita contro i bot, senza rete
 let offlineN = 2;             // formato: NvN
 let botLevel = 'medium';      // easy | medium | hard
+let gameMode = 'flag';        // 'flag' = conquista la bandiera | 'dm' = solo sparatoria (niente bandiera)
+const KILL_WIN = 20;          // solo sparatoria: vince la prima squadra a 20 eliminazioni
 let lastAttacker = '';
 
 const WALL = { w: 1.40, h: 1.5, t: 0.54 };
@@ -836,6 +849,7 @@ function spawn(t, x, z, a) {
 
 function place(t, x, z, a) {
   if (gamePhase !== 'setup') return;
+  if (t === 'flag' && gameMode !== 'flag') return;   // solo sparatoria: niente bandiera
   if (isGuest()) { if (gamePhase === 'setup') say("L'arena la costruisce l'host", '#ffd84d', 2); return; }
   const o = spawn(t, x, z, a);
   if (isWall(t)) {
@@ -906,7 +920,29 @@ function clearAll(force) {
 // L'arena NON viene salvata: ogni volta che si apre il sito si riparte da zero (cancello anche i vecchi salvataggi)
 try { localStorage.removeItem(KEY); } catch (e) {}
 
-const arenaIsReady = () => !!(single.blue && single.red && single.flag);
+const arenaIsReady = () => !!(single.blue && single.red && (gameMode === 'dm' || single.flag));
+
+// ---- Modalita': 'flag' (conquista la bandiera) o 'dm' (solo sparatoria: la bandiera non esiste e non si puo' piazzare)
+function setGameMode(m, fromNet) {
+  if (m !== 'flag' && m !== 'dm') return;
+  gameMode = m;
+  if (m === 'dm') {
+    if (single.flag) { world.remove(single.flag); single.flag = null; }
+    for (let i = history.length - 1; i >= 0; i--) if (history[i].t === 'flag') history.splice(i, 1);
+    if (tool === 'flag') tool = null;
+    ghosts.forEach(x => x.g.visible = false);
+  }
+  updateModeUi();
+  refresh();
+  if (!fromNet && isHost && mpPeer) broadcastArena();
+}
+function updateModeUi() {
+  document.querySelectorAll('.chip[data-m]').forEach(c => c.classList.toggle('sel', c.dataset.m === gameMode));
+  const h = document.getElementById('off-hint');
+  if (h) h.innerHTML = gameMode === 'dm'
+    ? 'Nel visore piazzi Base BLU e Base ROSSA (niente bandiera), scegli la squadra e avvii: i bot completano le squadre. Vince la prima squadra a ' + KILL_WIN + ' eliminazioni.'
+    : 'Nel visore piazzi Base BLU, Base ROSSA e Bandiera Centro, scegli la squadra e avvii: i bot completano le squadre. Vince chi arriva a 500 punti conquistando la bandiera.';
+}
 
 // ============================================================================
 // 7. ARMA: KALASHNIKOV (una mano, oppure due mani come i militari)
@@ -1496,7 +1532,7 @@ function drawPill(m) {
   x.fillText(
     id === 'undo' ? '↶ Annulla' :
     id === 'clear' ? (ask ? 'Sicuro?' : '🗑 Svuota') :
-    ok ? '✓ CONFERMA ARENA' : 'Piazza basi e bandiera',
+    ok ? '✓ CONFERMA ARENA' : gameMode === 'dm' ? 'Piazza le due basi' : 'Piazza basi e bandiera',
     W / 2, H / 2 + 2
   );
   tex.needsUpdate = true;
@@ -1519,10 +1555,10 @@ function drawPanel() {
   x.font = 'bold 20px system-ui,sans-serif';
   const chips = [
     ['#4da3ff', single.blue, 'BLU', 130],
-    ['#ffd84d', single.flag, 'BANDIERA', 200],
+    ...(gameMode === 'flag' ? [['#ffd84d', single.flag, 'BANDIERA', 200]] : []),
     ['#ff5a5a', single.red, 'ROSSA', 150]
   ];
-  let cx = (PW - (130 + 200 + 150 + 28)) / 2;
+  let cx = (PW - (chips.reduce((a, c) => a + c[3], 0) + 14 * (chips.length - 1))) / 2;
   chips.forEach(([c, on, l, w]) => {
     rr(x, cx, 102, w, 40, 20); x.fillStyle = on ? c + '33' : 'rgba(255,255,255,.05)'; x.fill();
     x.lineWidth = 2.5; x.strokeStyle = on ? c : 'rgba(255,255,255,.18)'; x.stroke();
@@ -1569,7 +1605,7 @@ function updateMenu(dt, t) {
     const d = m.userData, p = ease(menuT * 1.7 - d.i * 0.1), pb = back(menuT * 1.7 - d.i * 0.1);
     d.s += ((hoverObj === m ? 1.07 : 1) - d.s) * Math.min(1, dt * 18);
     m.scale.setScalar(Math.max(0.001, pb * d.s));
-    m.visible = p > 0.01;
+    m.visible = p > 0.01 && !(d.id === 'flag' && gameMode !== 'flag');
     m.material.opacity = p;
     if (d.mini) {
       d.l += ((d.id === tool ? 1 : 0) - d.l) * Math.min(1, dt * 12);
@@ -1582,6 +1618,7 @@ function updateMenu(dt, t) {
 
 function setTool(t) {
   if (gamePhase !== 'setup') return;
+  if (t === 'flag' && gameMode !== 'flag') return;
   tool = t;
   cards.forEach(drawCard);
 }
@@ -1728,7 +1765,7 @@ function updateAR() {
   // Oggetti cliccabili via raycast
   let hot = [];
   if (gamePhase === 'setup') {
-    hot = menuOpen ? [toggle, ...cards, ...pills] : [toggle];
+    hot = menuOpen ? [toggle, ...cards.filter(c => !(c.userData.id === 'flag' && gameMode !== 'flag')), ...pills] : [toggle];
   } else if (gamePhase === 'team_select') {
     hot = [teamBlueCard, teamRedCard, teamStartBtn];
   }
@@ -1847,7 +1884,7 @@ function placeTeamTerminal(instant, dt) {
 
 function goToTeamSelect() {
   if (!arenaIsReady()) {
-    showBanner('Piazza prima Base BLU, Base ROSSA e Bandiera Centro!');
+    showBanner(gameMode === 'dm' ? 'Piazza prima Base BLU e Base ROSSA!' : 'Piazza prima Base BLU, Base ROSSA e Bandiera Centro!');
     return;
   }
   gamePhase = 'team_select';
@@ -1968,6 +2005,11 @@ function hurt(d) {
 }
 function die() {
   dead = true; respawnT = RESPAWN_S;
+  if (gameMode === 'dm') {
+    const en = myTeam === 'blue' ? 'red' : 'blue';
+    if (isGuest()) { if (mpConns[0] && mpConns[0].open) mpConns[0].send({ type: 'kill', team: en }); }   // l'host conta e rimanda a tutti
+    else onKill(en, true);
+  }
   rightBlaster.visible = false;
   say(offline && lastAttacker ? 'Eliminato da ' + lastAttacker + '! Rinasci tra ' + RESPAWN_S + 's' : 'ELIMINATO! Rinasci tra ' + RESPAWN_S + ' secondi', '#ff3b3b', RESPAWN_S);
 }
@@ -1983,6 +2025,14 @@ function onFlagCaptured(team, local) {
   drawBelt();
   if (local && mpPeer) broadcast({ type: 'flag_capture', team });
   if (teamScore[team] >= WIN_SCORE) endMatch(team);
+}
+// Solo sparatoria: ogni eliminazione = +1 punto alla squadra avversaria della vittima
+function onKill(team, local) {
+  if (gameMode !== 'dm' || gamePhase !== 'play') return;
+  teamScore[team] += 1;
+  drawBelt();
+  if (local && mpPeer) broadcast({ type: 'kill', team });
+  if (teamScore[team] >= KILL_WIN) endMatch(team);
 }
 function endMatch(team) {
   gamePhase = 'ended';
@@ -2148,6 +2198,7 @@ function resetPeer() {
 function arenaPayload() {
   return {
     type: 'init_world',
+    mode: gameMode,
     arena: {
       walls: walls.map(o => [...pack(o), o.userData.kind]),
       blue: single.blue && pack(single.blue),
@@ -2289,6 +2340,7 @@ function broadcastArena() {
 function handleNetMessage(m, conn) {
   if (!m || !m.type) return;
   if (m.type === 'init_world' && !isHost && m.arena) {
+    if (m.mode) setGameMode(m.mode, true);
     clearAll(true);
     (m.arena.walls || []).forEach(([x, z, a, k]) => walls.push(spawn(WSPEC[k] ? k : 'wall', x, z, a)));
     ['blue', 'red', 'flag'].forEach(k => {
@@ -2321,6 +2373,9 @@ function handleNetMessage(m, conn) {
     const org = new THREE.Vector3(...m.origin);
     const dir = new THREE.Vector3(...m.dir);
     shootLaser(org, dir, m.team, m.isLeft, false);
+  } else if (m.type === 'kill') {
+    onKill(m.team, false);
+    if (isHost) broadcast(m);
   } else if (m.type === 'flag_capture' && !isHost) {
     onFlagCaptured(m.team, false);
   } else if (m.type === 'cap' && !isHost) {
@@ -2433,7 +2488,7 @@ function smoothRemotes(dt) {
 let inCaptureZoneTime = 0;
 let capSendT = 0, capSent = 0;
 function flagLogic(dt) {
-  if (gamePhase !== 'play' || !single.flag) { capP = 0; return; }
+  if (gamePhase !== 'play' || !single.flag || gameMode !== 'flag') { capP = 0; return; }
   const f = single.flag.position;
   let nb = 0, nr = 0;
   const inZ = (x, z) => Math.hypot(x - f.x, z - f.z) < 1.9;
@@ -2538,7 +2593,7 @@ function spawnBots() {
       const b = {
         id: 'bot-' + bots.length, name: names.pop() || ('Bot ' + (bots.length + 1)), team, x, z,
         yaw: Math.atan2(-(f.x - x), -(f.z - z)), pitch: 0, hp: 100, dead: false, respT: 0, invuln: 1.5,
-        role: i % 2 === 0 ? 'cap' : 'hunt', fireCd: 0.5 + Math.random() * 0.6, burst: 0, seen: 0,
+        role: (gameMode === 'flag' && i % 2 === 0) ? 'cap' : 'hunt', fireCd: 0.5 + Math.random() * 0.6, burst: 0, seen: 0,
         tgt: null, tgtT: Math.random() * 0.2, hx: null, hz: null, strafe: 1, strafeT: 0, steer: 1, stuckT: 0, scan: Math.random() < 0.5 ? -1 : 1
       };
       bots.push(b);
@@ -2620,6 +2675,7 @@ function damageBot(b, d, l) {
   if (b.hp > 0) return;
   b.dead = true; b.hp = 0; b.respT = RESPAWN_S; b.tgt = null;
   pushBotPose(b);
+  onKill(l.team, false);
   if (mine) say('Hai eliminato ' + b.name + '!', '#3bff7a', 1.6);
   else if (l.bot && b.team === myTeam) say(l.bot.name + ' ha eliminato ' + b.name, '#ff9d4d', 1.4);
 }
@@ -2969,6 +3025,7 @@ function updateOfflineUi() {
 
 document.getElementById('main-logo').src = LOGO_SRC;
 updateOfflineUi();
+updateModeUi();
 initAR();
 refresh();
 (function () {
