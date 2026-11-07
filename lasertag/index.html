@@ -2720,6 +2720,7 @@ const _aQ = new THREE.Quaternion(), _aE = new THREE.Euler();
 
 // ---- Ancora PERSISTENTE: il visore la ricorda anche dopo essere usciti dall'AR, cosi' l'arena resta nello stesso punto della stanza.
 // Ogni sessione AR ha una nuova origine: senza ancora salvata muri e basi (ancora in memoria) si ritroverebbero spostati.
+const USE_ANCHORS = false;   // OFF: le ancore del visore possono ritrovare un punto sbagliato senza dare errori. Si usa il riallineamento a 2 punti.
 const ANCHOR_KEY = 'lt-anchor-v1';
 let anchorTried = false, anchorRestoring = false, anchorRestoreAt = 0, anchorLostAt = 0, anchorWarned = false;
 const arenaHasContent = () => walls.length > 0 || !!(single.blue || single.red || single.flag);
@@ -2770,7 +2771,7 @@ function updateArenaAnchor(frame) {
   if (!xrBase) xrBase = renderer.xr.getReferenceSpace();            // lo spazio di base, prima di sostituirlo
   if (!xrBase || !renderer.xr.setReferenceSpace) return;
 
-  if (anchorState !== 'failed') {
+  if (USE_ANCHORS && anchorState !== 'failed') {
     if (!frame.createAnchor) { anchorState = 'failed'; if (!anchorWarned) { anchorWarned = true; say('Ancore non supportate: riallinea l\'arena a mano a ogni ingresso', '#ff9d4d', 4); } }
     else if (!arenaAnchor) {
       if (anchorState !== 'pending') {
@@ -2835,8 +2836,8 @@ function startCalibration() {
 
 function calibMsg() {
   const own = !isGuest();
-  if (calibStep === 0) say(own ? 'RIALLINEA 1/2: punta dove avevi messo la BASE BLU e premi il grilletto' : 'ALLINEA 1/2: punta il centro della BASE BLU reale e premi il grilletto', '#2f8bff', 3);
-  else say(own ? 'RIALLINEA 2/2: punta dove avevi messo la BASE ROSSA e premi il grilletto' : 'ALLINEA 2/2: punta il centro della BASE ROSSA reale e premi il grilletto', '#ff4d4d', 3);
+  if (calibStep === 0) say(own ? 'RIALLINEA 1/2: punta la BASE BLU e premi il grilletto (grip sinistro = salta)' : 'ALLINEA 1/2: punta il centro della BASE BLU reale e premi il grilletto', '#2f8bff', 3);
+  else say(own ? 'RIALLINEA 2/2: punta la BASE ROSSA e premi il grilletto (grip sinistro = salta)' : 'ALLINEA 2/2: punta il centro della BASE ROSSA reale e premi il grilletto', '#ff4d4d', 3);
 }
 
 function calibClick(c) {
@@ -2853,7 +2854,7 @@ function calibClick(c) {
   const bh = single.blue.position, rh = single.red.position;
   const vhx = rh.x - bh.x, vhz = rh.z - bh.z, vcx = hit.x - calibP0.x, vcz = hit.z - calibP0.z;
   const dh = Math.hypot(vhx, vhz), dc = Math.hypot(vcx, vcz);
-  if (dc < 1.0 || Math.abs(dc - dh) > Math.max(0.6, dh * 0.12)) {
+  if (dc < 1.0 || Math.abs(dc - dh) > Math.max(0.8, dh * 0.15)) {
     say('Punti non validi: tu ' + dc.toFixed(1) + ' m, arena ' + dh.toFixed(1) + ' m. Riprova', '#ff6b6b', 3.5);
     calibStep = 0; calibMark.visible = false;
     return;
@@ -2883,6 +2884,11 @@ function updateCalibration(dt) {
 
 // ripetere la calibrazione: grip sinistro (fuori partita)
 ctrls.forEach(c => c.addEventListener('squeezestart', () => {
+  if (inAR && !isGuest() && c.userData.hand === 'left' && calibNeeded()) {   // arena gia' al posto giusto: salto
+    realignNeeded = false; calibStep = 0; calibMark.visible = false; calibRing.visible = false;
+    say('Allineamento saltato', '#ffd84d', 2);
+    return;
+  }
   if (inAR && gamePhase !== 'play' && c.userData.hand === 'left' && single.blue && single.red && (isGuest() ? calibrated : !calibNeeded())) startCalibration();
 }));
 
