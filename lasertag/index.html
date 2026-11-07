@@ -2717,6 +2717,29 @@ const anchorPose = { x: 0, z: 0, yaw: 0 };    // posa dell'ancora nello spazio d
 const calib = { x: 0, z: 0, yaw: 0 };         // posa del sistema "host" rispetto al sistema dell'ancora (identita' per l'host)
 const lastRef = { x: 0, z: 0, yaw: 0 };       // ultimo allineamento applicato
 const _aQ = new THREE.Quaternion(), _aE = new THREE.Euler();
+
+// ---- Ancora PERSISTENTE: il visore la ricorda anche dopo essere usciti dall'AR, cosi' l'arena resta nello stesso punto della stanza.
+// Ogni sessione AR ha una nuova origine: senza ancora salvata muri e basi (ancora in memoria) si ritroverebbero spostati.
+const ANCHOR_KEY = 'lt-anchor-v1';
+let anchorTried = false, anchorRestoring = false, anchorRestoreAt = 0, anchorLostAt = 0, anchorWarned = false;
+const arenaHasContent = () => walls.length > 0 || !!(single.blue || single.red || single.flag);
+function savedAnchorId() { try { return localStorage.getItem(ANCHOR_KEY) || ''; } catch (e) { return ''; } }
+function storeAnchorId(id) { try { if (id) localStorage.setItem(ANCHOR_KEY, id); else localStorage.removeItem(ANCHOR_KEY); } catch (e) {} }
+function persistArenaAnchor(session, a) {
+  if (!a || !a.requestPersistentAnchor) {
+    if (!anchorWarned) { anchorWarned = true; say('Ancora permanente non supportata: se esci dall\'AR l\'arena puo\' spostarsi', '#ff9d4d', 4); }
+    return;
+  }
+  const old = savedAnchorId();
+  a.requestPersistentAnchor().then(id => {
+    storeAnchorId(id);
+    if (old && old !== id && session.deletePersistentAnchor) session.deletePersistentAnchor(old).catch(() => {});
+  }).catch(e => console.warn('Ancora permanente non salvata:', e));
+}
+function giveUpRestore(msg) {
+  anchorRestoring = false;
+  if (msg) say(msg, '#ff9d4d', 4);
+}
 const rotXZ = (a, x, z) => [x * Math.cos(a) + z * Math.sin(a), -x * Math.sin(a) + z * Math.cos(a)];   // stessa convenzione di rotation.y
 
 function resetArenaAnchor() {
@@ -2726,6 +2749,8 @@ function resetArenaAnchor() {
   calib.x = calib.z = calib.yaw = 0;
   lastRef.x = lastRef.z = lastRef.yaw = 0;
   calibrated = false; calibStep = 0; calibHostId = null;
+  anchorTried = false; anchorRestoring = false; anchorLostAt = 0;
+  world.visible = true;
   try { if (renderer.xr.setReferenceSpace) renderer.xr.setReferenceSpace(null); } catch (e) {}
 }
 
@@ -2750,22 +2775,43 @@ function updateArenaAnchor(frame) {
     else if (!arenaAnchor) {
       if (anchorState !== 'pending') {
         anchorState = 'pending';
-        const q = { x: 0, y: Math.sin(anchorPose.yaw / 2), z: 0, w: Math.cos(anchorPose.yaw / 2) };
-        frame.createAnchor(new XRRigidTransform({ x: anchorPose.x, y: 0, z: anchorPose.z }, q), xrBase)
-          .then(a => { arenaAnchor = a; anchorState = 'ok'; })
-          .catch(e => { console.warn('Ancora spaziale non disponibile:', e); anchorState = 'failed'; });
+        const saved = savedAnchorId();
+        if (!anchorTried && saved && arenaHasContent() && frame.session.restorePersistentAnchor) {
+          // arena gia' costruita: ritrovo l'ancora salvata (stesso punto della stanza di prima)
+          anchorTried = true; anchorRestoring = true; anchorRestoreAt = performance.now();
+          say('Ritrovo la posizione dell\'arena...', '#ffd84d', 3);
+          frame.session.restorePersistentAnchor(saved)
+            .then(a => { arenaAnchor = a; anchorState = 'ok'; anchorLostAt = 0; })
+            .catch(e => {
+              console.warn('Ancora salvata non ritrovata:', e);
+              storeAnchorId(''); anchorState = 'none';
+              giveUpRestore('Posizione arena non ritrovata: ricostruiscila');
+            });
+        } else {
+          const q = { x: 0, y: Math.sin(anchorPose.yaw / 2), z: 0, w: Math.cos(anchorPose.yaw / 2) };
+          frame.createAnchor(new XRRigidTransform({ x: anchorPose.x, y: 0, z: anchorPose.z }, q), xrBase)
+            .then(a => { arenaAnchor = a; anchorState = 'ok'; persistArenaAnchor(frame.session, a); })
+            .catch(e => { console.warn('Ancora spaziale non disponibile:', e); anchorState = 'failed'; });
+        }
       }
-    } else if (frame.trackedAnchors && !frame.trackedAnchors.has(arenaAnchor)) {   // ancora persa: la ricreo dove era
-      arenaAnchor = null; anchorState = 'none';
     } else {
-      const pose = frame.getPose(arenaAnchor.anchorSpace, xrBase);
+      const now = performance.now();
+      if (frame.trackedAnchors && !frame.trackedAnchors.has(arenaAnchor)) {
+        // ancora non (ancora) tracciata: aspetto qualche secondo prima di darla per persa e ricrearla dove era
+        if (!anchorLostAt) anchorLostAt = now;
+        if (now - anchorLostAt > 3000) { arenaAnchor = null; anchorState = 'none'; anchorLostAt = 0; anchorTried = true; anchorRestoring = false; }
+      } else anchorLostAt = 0;
+      const pose = arenaAnchor ? frame.getPose(arenaAnchor.anchorSpace, xrBase) : null;
       if (pose) {                                                   // se il tracking manca tengo l'ultimo allineamento
         const o = pose.transform.orientation;
         _aQ.set(o.x, o.y, o.z, o.w); _aE.setFromQuaternion(_aQ, 'YXZ');
         anchorPose.x = pose.transform.position.x; anchorPose.z = pose.transform.position.z; anchorPose.yaw = _aE.y;   // solo piano: il pavimento resta orizzontale
+        if (anchorRestoring) { anchorRestoring = false; say('ARENA RITROVATA \u2713', '#3bff7a', 2); }
       }
     }
+    if (anchorRestoring && performance.now() - anchorRestoreAt > 8000) giveUpRestore('Posizione arena non ritrovata: ricostruiscila');
   }
+  world.visible = !anchorRestoring;   // finche' l'ancora non e' localizzata non mostro l'arena nel posto sbagliato
   applyRefSpace();
 }
 
